@@ -11,17 +11,17 @@
 ## week 1: setup and foundation
 
 ### environment configuration
-- [ ] Install Rust and tools (rustup, cargo)
-- [ ] Install Node.js 24 LTS and pnpm 10.20+
-- [ ] Install Tauri CLI 2.8.5+
-- [ ] Verify Xcode Command Line Tools
+- [x] Install Rust and tools (rustup, cargo) - Rust 1.91.0 ✅
+- [x] Install Node.js 23.11.1 and pnpm 10.19.0 ✅
+- [x] Install Tauri CLI 2.9.2 ✅
+- [x] Verify Xcode Command Line Tools ✅
 
 ### project initialization
-- [ ] Create Tauri project with React + TypeScript template
-- [ ] Configure folder structure (ui, core, services)
-- [ ] Configure ESLint + Prettier + Tailwind
-- [ ] Configure Git and .gitignore
-- [ ] Create repository (optional)
+- [x] Create Tauri project with React + TypeScript template ✅
+- [x] Configure folder structure (ui, core, services) ✅
+- [x] Configure ESLint + Prettier + Tailwind ✅
+- [x] Configure Git and .gitignore ✅
+- [x] Create repository at github.com/beloureiro/inlocker ✅
 
 ### basic backend (Rust)
 - [ ] Define basic types (BackupConfig, BackupJob)

@@ -47,34 +47,39 @@ Complete documentation is organized in `/docs`:
 ## tech stack
 
 **frontend:**
-- React 19.2 + TypeScript 5.9
-- TailwindCSS + shadcn/ui
-- Zustand (state)
+- React 19.2 + TypeScript 5.8
+- TailwindCSS 3.4 + shadcn/ui
+- Zustand 5.0 (state)
+- lucide-react (icons)
 
 **backend:**
-- Tauri 2.8.5 (framework)
-- Rust 1.91+ (core)
+- Tauri 2.9.2 (framework)
+- Rust 1.91.0 (core)
 - zstd 0.13 (compression)
 - ring (cryptography)
 
 **build tools:**
-- Node.js 24 LTS "Krypton"
-- pnpm 10.20+
-- Vite 7.0
+- Node.js 23.11.1
+- pnpm 10.19.0
+- Vite 7.1.12
 
 ---
 
 ## project status
 
-**current phase:** planning ✅
+**current phase:** development - week 1 ✅
 
 ### progress
 - [x] Directory structure
 - [x] Complete documentation
 - [x] Architecture defined
 - [x] Tech stack chosen (latest 2025 versions)
-- [ ] Environment setup
-- [ ] MVP development (4 weeks)
+- [x] Environment setup complete
+- [x] Tauri + React app running
+- [ ] Week 1: Basic backend and frontend (in progress)
+- [ ] Week 2: Backup core
+- [ ] Week 3: Automation and security
+- [ ] Week 4: Polish and delivery
 
 ---
 
@@ -83,9 +88,9 @@ Complete documentation is organized in `/docs`:
 ### for development
 - macOS 12.0+ (Monterey)
 - Xcode Command Line Tools
-- Rust 1.91+
-- Node.js 24 LTS+
-- pnpm 10.20+
+- Rust 1.91.0+
+- Node.js 23.11.1+
+- pnpm 10.19.0+
 
 ### for end user
 - macOS 12.0+
@@ -114,14 +119,15 @@ Complete documentation is organized in `/docs`:
 
 ## quick start
 
-See [QUICKSTART.md](QUICKSTART.md) for detailed setup instructions.
+See [quickstart.md](quickstart.md) for detailed setup instructions.
 
 ```bash
-# Install Tauri CLI
-cargo install tauri-cli --version "^2.8"
+# Clone repository
+git clone https://github.com/beloureiro/inlocker.git
+cd inlocker
 
-# Create project
-pnpm create tauri-app
+# Install dependencies
+pnpm install
 
 # Run development server
 pnpm tauri dev
@@ -143,7 +149,7 @@ This project is in initial development. Contributions will be welcome after MVP.
 
 ## contact
 
-Issues: [GitHub Issues](link-to-be-added)
+Issues: [GitHub Issues](https://github.com/beloureiro/inlocker/issues)
 
 ---
 

@@ -5,7 +5,7 @@
 ```
 ┌─────────────────────────────────────────┐
 │         FRONTEND (Interface)            │
-│  • React 19.2 + TypeScript 5.9          │
+│  • React 19.2 + TypeScript 5.8          │
 │  • TailwindCSS (styling)                │
 │  • shadcn/ui (components)               │
 │  • Zustand (state management)           │
@@ -15,8 +15,8 @@
                   ▼
 ┌─────────────────────────────────────────┐
 │         BACKEND (Logic)                 │
-│  • Rust 1.91+                           │
-│  • Tauri 2.8.5                          │
+│  • Rust 1.91                            │
+│  • Tauri 2.9.2                          │
 │  • tokio (async runtime)                │
 │  • serde (serialization)                │
 └─────────────────────────────────────────┘
@@ -34,11 +34,11 @@
 ## development tools
 
 ### build & package
-- **Rust**: rustc 1.91+ (MSRV)
-- **Node.js**: v24 LTS "Krypton"
-- **pnpm**: 10.20+
-- **Tauri CLI**: 2.8.5+
-- **Vite**: 7.0+
+- **Rust**: rustc 1.91.0
+- **Node.js**: v23.11.1 (moving to v24 LTS)
+- **pnpm**: 10.19.0
+- **Tauri CLI**: 2.9.2
+- **Vite**: 7.1.12
 
 ### code quality
 - **ESLint**: Linting JavaScript/TypeScript
@@ -60,19 +60,22 @@
   "dependencies": {
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "@tauri-apps/api": "^2.8.5",
-    "zustand": "^5.0.3",
+    "@tauri-apps/api": "^2.9.0",
+    "@tauri-apps/plugin-opener": "^2.5.2",
+    "zustand": "^5.0.8",
     "date-fns": "^4.1.0",
-    "lucide-react": "^0.468.0"
+    "lucide-react": "^0.552.0"
   },
   "devDependencies": {
-    "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0",
-    "@vitejs/plugin-react": "^4.3.4",
-    "typescript": "^5.9.3",
-    "tailwindcss": "^3.4.17",
-    "vite": "^7.0.0",
-    "vitest": "^2.1.8"
+    "@types/node": "^24.9.2",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "typescript": "^5.8.3",
+    "tailwindcss": "^3.4.18",
+    "vite": "^7.1.12"
   }
 }
 ```
@@ -80,9 +83,11 @@
 ### backend (Cargo.toml)
 ```toml
 [dependencies]
-tauri = { version = "2.8", features = ["notification"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+tauri = { version = "^2.9", features = [] }
+tauri-plugin-opener = "^2.5"
+tauri-plugin-notification = "^2.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 tokio = { version = "1.42", features = ["full"] }
 zstd = "0.13"
 ring = "0.17"
@@ -93,33 +98,33 @@ log = "0.4"
 env_logger = "0.11"
 
 [build-dependencies]
-tauri-build = "2.0"
+tauri-build = { version = "^2.5", features = [] }
 ```
 
 ## justification of choices
 
-### 1. tauri 2.8.5
+### 1. tauri 2.9.2
 **Why:**
 - 50% less memory consumption vs Electron
 - Binaries 30x smaller (2-3 MB vs 80+ MB)
 - Startup <500ms
 - Uses native webview (WebKit on macOS)
 - Security by default
-- **Latest stable version** (September 2025)
+- **Latest stable version** (November 2025)
 
 **Alternatives considered:**
 - ❌ Electron: Too heavy
 - ❌ Flutter: Great for mobile, overkill for desktop
 - ❌ Native Swift: Loses portability
 
-### 2. react 19.2 + typescript 5.9
+### 2. react 19.2 + typescript 5.8
 **Why:**
 - Mature ecosystem
 - TypeScript prevents bugs
 - Reusable components
 - Large community
 - **React 19.2** brings server actions and improved ref handling
-- **TypeScript 5.9** has better performance and hover tooltips
+- **TypeScript 5.8** provides excellent type safety and developer experience
 
 **Alternatives considered:**
 - ⚠️ Svelte: Lighter, but smaller ecosystem
@@ -171,20 +176,20 @@ tauri-build = "2.0"
 - ❌ Redux: Too verbose
 - ⚠️ Jotai: Excellent, but Zustand is more straightforward
 
-### 7. vite 7.0
+### 7. vite 7.1.12
 **Why:**
 - Fastest build tool available
 - ESM-only distribution (modern)
-- Requires Node.js 20.19+, 22.12+ (we use Node 24 LTS)
+- Excellent hot-reload performance for development
 - Perfect for Tauri + React setup
-- **Latest major version** (2025)
+- **Latest stable version** (2025)
 
-### 8. node.js 24 lts "krypton"
+### 8. node.js 23.11.1
 **Why:**
-- Long Term Support until April 2028
-- Latest LTS version (October 2025)
-- Best performance improvements
-- Required for Vite 7.0
+- Current stable version with excellent performance
+- Compatible with Vite 7.1.12
+- Will migrate to Node 24 LTS when available
+- Supports all modern ES modules features
 
 ## final file structure
 
@@ -249,8 +254,9 @@ InLocker/
 ### for development
 - macOS 12.0+ (Monterey)
 - Xcode Command Line Tools
-- Rust 1.91+
-- Node.js 24 LTS+
+- Rust 1.91.0+
+- Node.js 23.11.1+ (or v24 LTS)
+- pnpm 10.19.0+
 - 4 GB RAM minimum
 
 ### for end user
