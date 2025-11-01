@@ -7,11 +7,23 @@ export interface BackupConfig {
   name: string;
   source_path: string;
   destination_path: string;
-  schedule: string | null;
+  schedule: ScheduleConfig | null;
   enabled: boolean;
   encrypt: boolean;
+  backup_type: 'full' | 'incremental';
   created_at: number;
   updated_at: number;
+  last_backup_at: number | null;
+  last_backup_original_size: number | null;
+  last_backup_compressed_size: number | null;
+  last_backup_files_count: number | null;
+}
+
+export interface ScheduleConfig {
+  cron_expression: string;
+  preset: 'hourly' | 'daily' | 'weekly' | 'monthly' | 'custom' | null;
+  next_run: number | null;
+  enabled: boolean;
 }
 
 interface BackupStore {

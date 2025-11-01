@@ -12,7 +12,11 @@ function App() {
     loadConfigs();
   }, [loadConfigs]);
 
-  const handleFolderSelected = async (sourcePath: string, destinationPath: string) => {
+  const handleFolderSelected = async (
+    sourcePath: string,
+    destinationPath: string,
+    backupType: 'full' | 'incremental'
+  ) => {
     // Create a simple backup name from the source folder
     const folderName = sourcePath.split('/').pop() || 'Backup';
     const timestamp = Date.now();
@@ -25,8 +29,10 @@ function App() {
       schedule: null,
       enabled: true,
       encrypt: false,
+      backup_type: backupType,
       created_at: timestamp,
       updated_at: timestamp,
+      last_backup_at: null,
     };
 
     await saveConfig(newConfig);

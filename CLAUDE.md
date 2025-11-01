@@ -194,3 +194,4 @@ Also see `quickstart.md` for development environment setup.
 - Recent commits show setup progress: environment setup → Tauri init → IPC testing
 - Modified files: `src-tauri/src/lib.rs`, `src/App.tsx`
 - Untracked: `src-tauri/src/commands.rs`, `src-tauri/src/types.rs` (need to be added)
+- sempre informar o que significa o comando que ira executar antes de executar
