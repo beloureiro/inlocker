@@ -1,6 +1,6 @@
 # InLocker - quick start guide
 
-This guide will help you start development in 15 minutes.
+This guide will help you start development quickly.
 
 ## prerequisites
 
@@ -26,7 +26,7 @@ npm install -g pnpm
 cargo install tauri-cli --version "^2.8"
 ```
 
-## project setup (week 1, steps 1-2)
+## project setup
 
 ### step 1: create tauri project
 
@@ -103,7 +103,7 @@ If everything is correct, a window should open with the base Tauri app!
 
 Now follow the roadmap in `docs/04-roadmap.md`:
 
-### week 1 - checklist
+### setup checklist
 
 ```markdown
 environment configuration
@@ -114,10 +114,10 @@ environment configuration
 
 project initialization
 - [x] Create Tauri project with React + TypeScript template
-- [ ] Configure folder structure (ui, core, services)
-- [ ] Configure ESLint + Prettier + Tailwind
-- [ ] Configure Git and .gitignore
-- [ ] Create repository (optional)
+- [x] Configure folder structure (ui, core, services)
+- [x] Configure ESLint + Prettier + Tailwind
+- [x] Configure Git and .gitignore
+- [x] Create repository
 ```
 
 ## useful commands
@@ -193,14 +193,6 @@ npm install -g pnpm
 - **Rust Book:** https://doc.rust-lang.org/book/
 - **React Docs:** https://react.dev/
 
-## estimated time
-
-- Initial setup: ~15 minutes
-- First run: ~5 minutes
-- Familiarization: ~30 minutes
-
-**Total:** ~50 minutes to be coding!
-
 ---
 
-**ready to start? Run the commands above and go to week 1 of the roadmap!**
+**ready to start? Run the commands above and check the roadmap in `docs/04-roadmap.md`!**

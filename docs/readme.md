@@ -42,7 +42,7 @@ We recommend reading the documents in this order:
 
 ### 4. [roadmap](04-roadmap.md)
 **Read to understand:**
-- Implementation plan week by week
+- Implementation phases and progress
 - Task checklist [ ]
 - Risks and mitigations
 - How to track progress
@@ -56,7 +56,7 @@ We recommend reading the documents in this order:
 If you just want to start developing:
 
 1. Read [tech stack](03-tech-stack.md) → "system requirements" section
-2. Read [roadmap](04-roadmap.md) → week 1
+2. Read [roadmap](04-roadmap.md) → start with phase 1
 3. Execute setup commands
 4. Start coding following the checkboxes
 

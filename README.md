@@ -22,22 +22,28 @@ A native macOS app that performs automatic backups of your important folders, wi
 
 Complete documentation is organized in `/docs`:
 
-1. **[value proposition](docs/01-value-proposition.md)**
+1. **[user guide](docs/USER-GUIDE.md)** 👤
+   - How to use InLocker
+   - Creating backups
+   - Managing configurations
+   - Troubleshooting
+
+2. **[value proposition](docs/01-value-proposition.md)**
    - The problem we solve
    - Who it's for
    - Competitive advantages
 
-2. **[architecture](docs/02-architecture.md)**
+3. **[architecture](docs/02-architecture.md)**
    - System diagram
    - Data flow
    - Main components
 
-3. **[tech stack](docs/03-tech-stack.md)**
+4. **[tech stack](docs/03-tech-stack.md)**
    - Technologies used
    - Justifications for choices
    - File structure
 
-4. **[roadmap](docs/04-roadmap.md)**
+5. **[roadmap](docs/04-roadmap.md)**
    - Implementation plan (4 weeks)
    - Progress checklist
    - Success metrics
@@ -67,7 +73,7 @@ Complete documentation is organized in `/docs`:
 
 ## project status
 
-**current phase:** development - week 1 ✅
+**current phase:** Phase 1 ✅ COMPLETE | Phase 2 🔄 NEXT
 
 ### progress
 - [x] Directory structure
@@ -76,10 +82,13 @@ Complete documentation is organized in `/docs`:
 - [x] Tech stack chosen (latest 2025 versions)
 - [x] Environment setup complete
 - [x] Tauri + React app running
-- [ ] Week 1: Basic backend and frontend (in progress)
-- [ ] Week 2: Backup core
-- [ ] Week 3: Automation and security
-- [ ] Week 4: Polish and delivery
+- [x] **Phase 1: Foundation** ✅ COMPLETE
+  - [x] Backend: types, commands, IPC, JSON persistence
+  - [x] Frontend: Layout, FolderSelector, BackupList, Zustand store
+  - [x] Design: Emerald green theme, lock icon logo, dark titlebar
+- [ ] **Phase 2: Backup Core** 🔄 NEXT
+- [ ] **Phase 3: Automation and Security** ⏳
+- [ ] **Phase 4: Polish and Delivery** ⏳
 
 ---
 
@@ -100,15 +109,15 @@ Complete documentation is organized in `/docs`:
 
 ## roadmap
 
-### MVP (4 weeks)
-- Drag-and-drop folder selection
-- Manual and automatic backup
-- zstd compression
-- Optional encryption
-- Dashboard with metrics
-- Point-in-time restore
+### MVP features
+- ✅ Folder selection and configuration management
+- ⏳ Manual and automatic backup
+- ⏳ zstd compression
+- ⏳ Optional encryption
+- ⏳ Dashboard with metrics
+- ⏳ Point-in-time restore
 
-### future
+### future enhancements
 - Incremental backup
 - Pattern exclusion (node_modules, .git)
 - Multiple destinations
@@ -119,7 +128,9 @@ Complete documentation is organized in `/docs`:
 
 ## quick start
 
-See [quickstart.md](quickstart.md) for detailed setup instructions.
+**For end users:** See [docs/USER-GUIDE.md](docs/USER-GUIDE.md) for a simple guide on using InLocker.
+
+**For developers:** See [quickstart.md](quickstart.md) for detailed setup instructions.
 
 ```bash
 # Clone repository

@@ -2,13 +2,12 @@
 
 ## overview
 
-**Total Duration:** 4 weeks
 **Model:** Iterative incremental
 **Goal:** Functional and tested MVP
 
 ---
 
-## week 1: setup and foundation
+## phase 1: foundation ✅ COMPLETE
 
 ### environment configuration
 - [x] Install Rust and tools (rustup, cargo) - Rust 1.91.0 ✅
@@ -24,24 +23,34 @@
 - [x] Create repository at github.com/beloureiro/inlocker ✅
 
 ### basic backend (Rust)
-- [ ] Define basic types (BackupConfig, BackupJob)
-- [ ] Implement Tauri command: `select_folder`
-- [ ] Implement Tauri command: `save_config`
-- [ ] Implement Tauri command: `load_config`
-- [ ] Test IPC communication (frontend ↔ backend)
+- [x] Define basic types (BackupConfig, BackupJob) ✅
+- [x] Implement Tauri command: `select_folder` ✅
+- [x] Implement Tauri command: `save_config` ✅
+- [x] Implement Tauri command: `load_config` ✅
+- [x] Test IPC communication (frontend ↔ backend) ✅
+- [x] Implement JSON persistence for configs ✅
+- [x] Add tauri-plugin-dialog for native folder picker ✅
 
 ### basic frontend (React)
-- [ ] Create main layout (Header + Sidebar + Content)
-- [ ] Create FolderSelector component (drag-drop)
-- [ ] Create basic Zustand store
-- [ ] Implement folder selection via Tauri
-- [ ] Display selected folders in UI
+- [x] Create main layout (Header + Sidebar + Content) ✅
+- [x] Create FolderSelector component ✅
+- [x] Create basic Zustand store ✅
+- [x] Implement folder selection via Tauri ✅
+- [x] Display selected folders in UI ✅
+- [x] Create BackupList component to show saved configs ✅
+- [x] Implement delete configuration functionality ✅
 
-**Week 1 Deliverable:** App opens, user can select folders
+### design improvements
+- [x] Update color scheme to emerald green (security-focused) ✅
+- [x] Add lock icon to logo (security branding) ✅
+- [x] Clean up unused files and directories ✅
+- [x] Configure dark titlebar integration ✅
+
+**Phase 1 Deliverable:** ✅ COMPLETE - App opens, user can select folders and save configurations
 
 ---
 
-## week 2: backup core
+## phase 2: backup core (next)
 
 ### compression engine
 - [ ] Add `zstd` dependency in Cargo.toml
@@ -51,30 +60,29 @@
 - [ ] Add progress logs
 
 ### manual backup execution
-- [ ] Create Tauri command: `run_backup_now`
-- [ ] Implement complete backup logic
+- [ ] Implement complete backup logic in `run_backup_now`
 - [ ] Generate compressed file in destination
 - [ ] Calculate size before/after
 - [ ] Return result to frontend
+- [ ] Handle errors gracefully
 
 ### backup UI
 - [ ] Create "Backup Now" button
 - [ ] Add loading state during backup
 - [ ] Display success/error notification
-- [ ] Show statistics (size, time)
+- [ ] Show statistics (size, time, compression ratio)
 - [ ] Create list of completed backups
 
 ### data persistence
-- [ ] Save configurations in local JSON
-- [ ] Load configurations on app start
-- [ ] Implement backup history
+- [ ] Implement backup history storage
 - [ ] Store metadata (date, size, status)
+- [ ] Load history on app start
 
-**Week 2 Deliverable:** User performs manual backup and sees result
+**Phase 2 Deliverable:** User performs manual backup and sees result
 
 ---
 
-## week 3: automation and security
+## phase 3: automation and security
 
 ### scheduler (scheduling)
 - [ ] Implement cron expression parser
@@ -103,11 +111,11 @@
 - [ ] Notify backup error
 - [ ] Add sounds (optional)
 
-**Week 3 Deliverable:** Automatic backups working + optional encryption
+**Phase 3 Deliverable:** Automatic backups working + optional encryption
 
 ---
 
-## week 4: polish and delivery
+## phase 4: polish and delivery
 
 ### dashboard and metrics
 - [ ] Create Dashboard component
@@ -144,14 +152,14 @@
 - [ ] Create README with usage instructions
 - [ ] Document how to do manual restore
 
-**Week 4 Deliverable:** Complete MVP, tested and ready to use
+**Phase 4 Deliverable:** Complete MVP, tested and ready to use
 
 ---
 
 ## final delivery checklist
 
 ### core features
-- [ ] Multiple folder selection
+- [x] Multiple folder selection
 - [ ] One-click manual backup
 - [ ] Scheduled automatic backup
 - [ ] Functional zstd compression
@@ -161,16 +169,16 @@
 - [ ] Dashboard with metrics
 
 ### quality
-- [ ] 0 crashes in 24h tests
+- [ ] 0 crashes in extended tests
 - [ ] Backups validated with checksum
 - [ ] Detailed logs for debug
 - [ ] Error handling (no panics)
 - [ ] Responsive UI (<100ms for actions)
 
 ### documentation
-- [ ] README with screenshots
-- [ ] Installation guide
-- [ ] Basic usage guide
+- [x] README with project overview
+- [x] User guide
+- [x] Basic usage instructions
 - [ ] FAQ (frequently asked questions)
 - [ ] How to report bugs
 
@@ -183,19 +191,19 @@
 
 ---
 
-## next steps (post-MVP)
+## future enhancements (post-MVP)
 
-### phase 2 (optional)
+### phase 5 (optional features)
 - [ ] Support for exclusion patterns (*.log, node_modules)
 - [ ] Incremental backup (only changes)
 - [ ] Periodic automatic integrity verification
-- [ ] Configuration export
+- [ ] Configuration export/import
 - [ ] Dark/light themes
 - [ ] Support for multiple destinations
 - [ ] Optional cloud synchronization
 - [ ] Backup versioning (keep last N)
 
-### phase 3 (future)
+### phase 6 (platform expansion)
 - [ ] Linux app
 - [ ] Windows app
 - [ ] CLI mode (no GUI)
@@ -221,11 +229,16 @@
 
 **MVP is successful if:**
 - ✅ User configures backup in <3 minutes
-- ✅ Automatic backup runs without failures for 7 days
+- ✅ Automatic backup runs without failures
 - ✅ Restore works 100% of the time
 - ✅ App is lighter than Time Machine/Electron apps
 - ✅ 0 critical bugs reported
 
-**Start:** Week 1, Day 1
-**Finish:** Week 4, Day 7
-**Review:** Daily (checklist)
+---
+
+## current status
+
+**Phase 1:** ✅ COMPLETE
+**Phase 2:** 🔄 NEXT
+**Phase 3:** ⏳ PENDING
+**Phase 4:** ⏳ PENDING

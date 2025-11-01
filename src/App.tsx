@@ -1,50 +1,64 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { useEffect } from 'react';
+import { Layout } from './ui/components/Layout';
+import { FolderSelector } from './ui/components/FolderSelector';
+import { BackupList } from './ui/components/BackupList';
+import { useBackupStore, BackupConfig } from './store/useBackupStore';
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const { loadConfigs, saveConfig, isLoading, error } = useBackupStore();
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+  // Load configs on mount
+  useEffect(() => {
+    loadConfigs();
+  }, [loadConfigs]);
+
+  const handleFolderSelected = async (sourcePath: string, destinationPath: string) => {
+    // Create a simple backup name from the source folder
+    const folderName = sourcePath.split('/').pop() || 'Backup';
+    const timestamp = Date.now();
+
+    const newConfig: BackupConfig = {
+      id: `backup-${timestamp}`,
+      name: `${folderName} Backup`,
+      source_path: sourcePath,
+      destination_path: destinationPath,
+      schedule: null,
+      enabled: true,
+      encrypt: false,
+      created_at: timestamp,
+      updated_at: timestamp,
+    };
+
+    await saveConfig(newConfig);
+  };
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <Layout>
+      <div className="max-w-4xl mx-auto space-y-8">
+        {/* Error Display */}
+        {error && (
+          <div className="bg-red-900/20 border border-red-800 text-red-300 px-4 py-3 rounded">
+            <p className="font-medium">Error</p>
+            <p className="text-sm">{error}</p>
+          </div>
+        )}
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+        {/* Loading State */}
+        {isLoading && (
+          <div className="text-center text-gray-400 py-4">
+            Loading...
+          </div>
+        )}
+
+        {/* Folder Selector */}
+        {!isLoading && (
+          <>
+            <FolderSelector onFolderSelected={handleFolderSelected} />
+            <BackupList />
+          </>
+        )}
       </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    </Layout>
   );
 }
 

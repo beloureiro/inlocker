@@ -44,7 +44,7 @@ Users need to protect their important data, but:
 ## success metrics
 
 **Short term:**
-- Functional app in 4 weeks
+- Functional MVP with core features
 - Reliable automatic backup
 - Intuitive interface (no manual needed)
 
