@@ -1,0 +1,105 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle with gradient -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#065f46;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#10b981;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="lockGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d1fae5;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#ffffff;stop-opacity:0.1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#bgGradient)"/>
+
+  <!-- Binary code pattern in background (cryptography theme) -->
+  <g opacity="0.15" fill="#ffffff" font-family="monospace" font-size="28" font-weight="bold">
+    <!-- Row 1 -->
+    <text x="100" y="150">1010 0110 1101</text>
+    <text x="100" y="200">0101 1001 0110</text>
+    <text x="100" y="250">1100 0011 1010</text>
+    <!-- Row 2 -->
+    <text x="100" y="350">0110 1101 0101</text>
+    <text x="100" y="400">1001 0110 1100</text>
+    <text x="100" y="450">0011 1010 0110</text>
+    <!-- Row 3 -->
+    <text x="100" y="750">1101 0101 1001</text>
+    <text x="100" y="800">0110 1100 0011</text>
+    <text x="100" y="850">1010 0110 1101</text>
+  </g>
+
+  <!-- Shield outline (protection layer) -->
+  <g transform="translate(512, 520)">
+    <path d="M 0 -350
+             L 200 -250
+             L 200 100
+             Q 200 250 0 380
+             Q -200 250 -200 100
+             L -200 -250
+             Z"
+          fill="url(#shieldGradient)"
+          stroke="#ffffff"
+          stroke-width="8"
+          stroke-opacity="0.2"/>
+  </g>
+
+  <!-- Lock icon (main element) -->
+  <g transform="translate(512, 490)">
+    <!-- Lock shackle (top arc) -->
+    <path d="M -110 -80
+             L -110 -160
+             A 110 110 0 0 1 110 -160
+             L 110 -80
+             M -75 -80
+             L -75 -160
+             A 75 75 0 0 1 75 -160
+             L 75 -80"
+          fill="url(#lockGradient)"
+          stroke="none"/>
+
+    <!-- Lock body (rounded rectangle with shadow) -->
+    <rect x="-135" y="-80" width="270" height="260" rx="35" fill="#047857" opacity="0.3"/>
+    <rect x="-140" y="-85" width="280" height="260" rx="40" fill="url(#lockGradient)"/>
+
+    <!-- Keyhole with encryption symbol -->
+    <g transform="translate(0, 30)">
+      <!-- Circle part of keyhole -->
+      <circle cx="0" cy="0" r="32" fill="#047857"/>
+      <!-- Rectangle part of keyhole -->
+      <rect x="-14" y="0" width="28" height="65" rx="7" fill="#047857"/>
+
+      <!-- Key teeth (encryption detail) -->
+      <g transform="translate(0, 45)">
+        <rect x="14" y="0" width="8" height="10" fill="#047857"/>
+        <rect x="14" y="12" width="12" height="8" fill="#047857"/>
+      </g>
+    </g>
+
+    <!-- Encryption hash symbols around keyhole -->
+    <g opacity="0.6" fill="#065f46" font-family="monospace" font-size="24" font-weight="bold">
+      <text x="-90" y="20">#</text>
+      <text x="75" y="20">#</text>
+      <text x="-90" y="100">&lt;</text>
+      <text x="75" y="100">&gt;</text>
+    </g>
+  </g>
+
+  <!-- Small lock icon for detail (padlock clasp) -->
+  <g transform="translate(512, 380)">
+    <circle cx="0" cy="0" r="8" fill="#d1fae5" opacity="0.8"/>
+  </g>
+
+  <!-- Hex pattern subtle overlay (cryptographic theme) -->
+  <g opacity="0.08" fill="none" stroke="#ffffff" stroke-width="2">
+    <circle cx="250" cy="250" r="40"/>
+    <circle cx="774" cy="250" r="40"/>
+    <circle cx="250" cy="774" r="40"/>
+    <circle cx="774" cy="774" r="40"/>
+  </g>
+</svg>

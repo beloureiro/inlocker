@@ -17,12 +17,58 @@ export function BackupConfigModal({ config, onSave, onClose }: BackupConfigModal
     config.schedule?.cron_expression || ''
   );
 
+  const handleCronChange = (value: string) => {
+    // Auto-format cron expression by adding spaces between fields
+    // Remove all existing spaces first
+    const cleanValue = value.replace(/\s+/g, '');
+
+    // Split into 5 fields intelligently
+    const parts: string[] = [];
+    let currentPart = '';
+
+    for (let i = 0; i < cleanValue.length; i++) {
+      const char = cleanValue[i];
+
+      // If it's a number, check if we should start a new field
+      if (/\d/.test(char)) {
+        // If current part is already a complete number or asterisk, start new part
+        if (currentPart && !/\d$/.test(currentPart)) {
+          parts.push(currentPart);
+          currentPart = char;
+        } else {
+          currentPart += char;
+        }
+      }
+      // If it's asterisk or other special char
+      else {
+        if (currentPart && currentPart !== '') {
+          parts.push(currentPart);
+          currentPart = char;
+        } else {
+          currentPart += char;
+        }
+      }
+
+      // Limit to 5 fields
+      if (parts.length >= 5) break;
+    }
+
+    // Add the last part
+    if (currentPart && parts.length < 5) {
+      parts.push(currentPart);
+    }
+
+    // Join with spaces
+    const formatted = parts.join(' ');
+    setCustomCron(formatted);
+  };
+
   const schedulePresets = [
     { value: 'none', label: 'Manual Only', cron: '' },
     { value: 'hourly', label: 'Every Hour', cron: '0 * * * *' },
-    { value: 'daily', label: 'Daily at 8 PM', cron: '0 20 * * *' },
-    { value: 'weekly', label: 'Weekly (Sunday 8 PM)', cron: '0 20 * * 0' },
-    { value: 'monthly', label: 'Monthly (1st at 8 PM)', cron: '0 20 1 * *' },
+    { value: 'daily', label: 'Daily at 2 PM', cron: '0 14 * * *' },
+    { value: 'weekly', label: 'Weekly (Sunday 2 PM)', cron: '0 14 * * 0' },
+    { value: 'monthly', label: 'Monthly (1st at 2 PM)', cron: '0 14 1 * *' },
     { value: 'custom', label: 'Custom Schedule', cron: '' },
   ];
 
@@ -148,13 +194,32 @@ export function BackupConfigModal({ config, onSave, onClose }: BackupConfigModal
               <input
                 type="text"
                 value={customCron}
-                onChange={(e) => setCustomCron(e.target.value)}
-                placeholder="0 2 * * *"
+                onChange={(e) => handleCronChange(e.target.value)}
+                placeholder="Type: 014*** or 0 14 * * *"
                 className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 placeholder-gray-500 focus:border-emerald-600 focus:outline-none transition-colors"
               />
-              <p className="text-xs text-gray-400 mt-1">
-                Format: minute hour day month weekday (e.g., "0 2 * * *" = daily at 2 AM)
-              </p>
+              <div className="mt-2 p-2.5 bg-gray-900/50 border border-gray-700 rounded text-xs space-y-1.5">
+                <div className="text-gray-400">
+                  <strong>Format:</strong> minute hour day month weekday
+                </div>
+                <pre className="text-gray-300 font-mono text-xs leading-snug overflow-x-auto">
+{`  0    14   *   *    *
+  │    │    │   │    └─ week (0-6, 0=Sun, *=any)
+  │    │    │   └────── month (1-12, *=any)
+  │    │    └────────── day (1-31, *=any)
+  │    └─────────────── hour (0-23, 14=2PM)
+  └──────────────────── minute (0-59)`}
+                </pre>
+                <div className="text-yellow-400 bg-yellow-900/20 border border-yellow-800/50 rounded px-2 py-1">
+                  <strong>*</strong> = "any" or "every" value
+                </div>
+                <div className="text-gray-400 space-y-0.5">
+                  <div className="font-semibold">Examples:</div>
+                  <div className="font-mono text-emerald-400">"0 14 * * *" <span className="text-gray-500">→ Daily 2PM</span></div>
+                  <div className="font-mono text-emerald-400">"30 9 * * 1" <span className="text-gray-500">→ Mon 9:30AM</span></div>
+                  <div className="font-mono text-emerald-400">"0 0 1 * *" <span className="text-gray-500">→ 1st/month midnight</span></div>
+                </div>
+              </div>
             </div>
           )}
 

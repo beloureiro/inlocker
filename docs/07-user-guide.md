@@ -4,38 +4,6 @@
 
 ---
 
-## Getting Started
-
-### For Developers (Running from source)
-
-If you're running InLocker from source code, follow these steps:
-
-#### Prerequisites
-- macOS 12.0 or later
-- Terminal access
-
-#### Installation
-
-1. **Clone the repository** (if you haven't already):
-   ```bash
-   git clone https://github.com/beloureiro/inlocker.git
-   cd inlocker
-   ```
-
-2. **Install dependencies**:
-   ```bash
-   pnpm install
-   ```
-
-3. **Run the app**:
-   ```bash
-   pnpm tauri dev
-   ```
-
-The InLocker app will open in a new window.
-
----
-
 ## Using InLocker
 
 ### Creating Your First Backup

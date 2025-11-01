@@ -191,9 +191,14 @@ export function BackupList() {
       // Perform restore
       setRunningBackups((prev) => new Set(prev).add(configId + '-restore'));
 
+      // Get checksum from config for integrity verification
+      const config = configs.find(c => c.id === configId);
+      const expectedChecksum = config?.last_backup_checksum || null;
+
       const result = await invoke('restore_backup', {
         backupFilePath: selectedBackup.path,
         restoreDestination: destination,
+        expectedChecksum,
       });
 
       setBackupResults((prev) =>
@@ -242,9 +247,9 @@ export function BackupList() {
             key={config.id}
             className="bg-gray-900 rounded border border-gray-800 p-3 hover:border-gray-700 transition-colors"
           >
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
                   <h3 className="text-sm font-medium text-white">{config.name}</h3>
                   <span className={`px-2 py-0.5 rounded text-xs ${config.backup_type === 'full' ? 'bg-blue-900 text-blue-300' : 'bg-purple-900 text-purple-300'}`}>
                     {config.backup_type === 'full' ? 'Full' : 'Incremental'}
@@ -261,15 +266,14 @@ export function BackupList() {
                     </span>
                   )}
                   {config.schedule && (
-                    <span className="px-2 py-0.5 rounded text-xs bg-blue-900/50 text-blue-400 flex items-center gap-1">
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <span className="px-1.5 py-0.5 rounded text-xs bg-blue-900/50 text-blue-400 flex items-center" title="Scheduled">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      Scheduled
                     </span>
                   )}
                 </div>
-                <div className="text-sm space-y-1">
+                <div className="text-sm space-y-1.5">
                   <div className="flex items-center gap-2">
                     <span className="text-gray-400">From:</span>
                     <span className="text-gray-300 font-mono text-xs">{config.source_path}</span>
@@ -278,33 +282,54 @@ export function BackupList() {
                     <span className="text-gray-400">To:</span>
                     <span className="text-gray-300 font-mono text-xs">{config.destination_path}</span>
                   </div>
-                  {config.last_backup_at && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-400">Last:</span>
-                      <span className="text-gray-300 text-xs">
-                        {new Date(config.last_backup_at * 1000).toLocaleString()}
-                      </span>
-                    </div>
-                  )}
-                  {config.last_backup_original_size && config.last_backup_compressed_size && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-400">Size:</span>
-                      <span className="text-gray-300 font-mono text-xs">
-                        {(config.last_backup_original_size / 1048576).toFixed(1)} MB → {(config.last_backup_compressed_size / 1048576).toFixed(1)} MB
-                        <span className="text-gray-500 ml-1">
-                          ({((1 - config.last_backup_compressed_size / config.last_backup_original_size) * 100).toFixed(0)}%)
+
+                  {/* Grid layout for stats - 2x2 grid */}
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-1 pt-1">
+                    {/* Row 1, Col 1 */}
+                    {config.last_backup_at && (
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-gray-400 text-xs whitespace-nowrap">Last:</span>
+                        <span className="text-gray-300 text-xs whitespace-nowrap">
+                          {new Date(config.last_backup_at * 1000).toLocaleString()}
                         </span>
-                      </span>
-                    </div>
-                  )}
-                  {config.last_backup_files_count !== null && config.last_backup_files_count !== undefined && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-400">Files:</span>
-                      <span className="text-gray-300 text-xs">
-                        {config.last_backup_files_count.toLocaleString()}
-                      </span>
-                    </div>
-                  )}
+                      </div>
+                    )}
+
+                    {/* Row 1, Col 2 */}
+                    {config.last_backup_original_size && config.last_backup_compressed_size && (
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-gray-400 text-xs whitespace-nowrap">Size:</span>
+                        <span className="text-gray-300 font-mono text-xs whitespace-nowrap">
+                          {(config.last_backup_original_size / 1048576).toFixed(1)} MB → {(config.last_backup_compressed_size / 1048576).toFixed(1)} MB
+                          <span className="text-gray-500 ml-1">
+                            ({((1 - config.last_backup_compressed_size / config.last_backup_original_size) * 100).toFixed(0)}%)
+                          </span>
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Row 2, Col 1 */}
+                    {config.last_backup_files_count !== null && config.last_backup_files_count !== undefined && (
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-gray-400 text-xs whitespace-nowrap">Files:</span>
+                        <span className="text-gray-300 text-xs whitespace-nowrap">
+                          {config.last_backup_files_count.toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Row 2, Col 2 */}
+                    {config.schedule && (
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-gray-400 text-xs whitespace-nowrap">Schedule:</span>
+                        <span className="text-gray-300 font-mono text-xs whitespace-nowrap">
+                          {config.schedule.preset && config.schedule.preset !== 'custom'
+                            ? config.schedule.preset.charAt(0).toUpperCase() + config.schedule.preset.slice(1)
+                            : config.schedule.cron_expression}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Backup status */}
@@ -370,31 +395,31 @@ export function BackupList() {
                 )}
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-1.5 min-w-[110px]">
                 <button
                   onClick={() => handleRunBackup(config.id)}
                   disabled={isRunning}
-                  className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 disabled:bg-gray-700 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
+                  className="px-3 py-1 bg-emerald-700 hover:bg-emerald-600 disabled:bg-gray-700 disabled:cursor-not-allowed rounded text-xs font-medium transition-colors whitespace-nowrap"
                 >
                   {isRunning ? 'Running...' : 'Run Backup'}
                 </button>
                 <button
                   onClick={() => handleRestore(config.id)}
                   disabled={isRunning}
-                  className="px-3 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:bg-gray-700 disabled:cursor-not-allowed rounded text-sm transition-colors flex items-center gap-1.5"
+                  className="px-3 py-1 bg-blue-700 hover:bg-blue-600 disabled:bg-gray-700 disabled:cursor-not-allowed rounded text-xs transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
                   title="Restore from backup"
                 >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
                   </svg>
                   Restore
                 </button>
                 <button
                   onClick={() => setEditingConfig(config)}
-                  className="px-3 py-1.5 text-sm text-gray-300 hover:text-white hover:bg-gray-800 rounded transition-colors flex items-center gap-1.5"
+                  className="px-3 py-1 text-xs text-gray-300 hover:text-white hover:bg-gray-800 rounded transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
                   title="Configure backup settings"
                 >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 011.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.56.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.893.149c-.425.07-.765.383-.93.78-.165.398-.143.854.107 1.204l.527.738c.32.447.269 1.06-.12 1.45l-.774.773a1.125 1.125 0 01-1.449.12l-.738-.527c-.35-.25-.806-.272-1.203-.107-.397.165-.71.505-.781.929l-.149.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527c-.447.32-1.06.269-1.45-.12l-.773-.774a1.125 1.125 0 01-.12-1.45l.527-.737c.25-.35.273-.806.108-1.204-.165-.397-.505-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.107-1.204l-.527-.738a1.125 1.125 0 01.12-1.45l.773-.773a1.125 1.125 0 011.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894z" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
@@ -402,7 +427,7 @@ export function BackupList() {
                 </button>
                 <button
                   onClick={() => handleDelete(config.id)}
-                  className="px-3 py-1.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition-colors"
+                  className="px-3 py-1 text-xs text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition-colors whitespace-nowrap"
                 >
                   Delete
                 </button>

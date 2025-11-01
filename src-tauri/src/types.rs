@@ -12,6 +12,10 @@ pub struct BackupConfig {
     pub schedule: Option<ScheduleConfig>,
     pub enabled: bool,
     pub encrypt: bool,
+    /// Encryption password (NEVER persisted to disk for security)
+    /// User must provide this each time for encrypted backups
+    #[serde(skip_serializing, default)]
+    pub encryption_password: Option<String>,
     #[serde(default = "default_backup_type")]
     pub backup_type: BackupType,
     pub created_at: i64,
@@ -24,6 +28,8 @@ pub struct BackupConfig {
     pub last_backup_compressed_size: Option<u64>,
     #[serde(default)]
     pub last_backup_files_count: Option<usize>,
+    #[serde(default)]
+    pub last_backup_checksum: Option<String>,
 }
 
 fn default_backup_type() -> BackupType {

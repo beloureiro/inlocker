@@ -17,6 +17,7 @@ export interface BackupConfig {
   last_backup_original_size: number | null;
   last_backup_compressed_size: number | null;
   last_backup_files_count: number | null;
+  last_backup_checksum: string | null;
 }
 
 export interface ScheduleConfig {

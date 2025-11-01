@@ -169,6 +169,9 @@ pub async fn run_backup_now(
     let source_path = Path::new(&config.source_path);
     let dest_path = Path::new(&config.destination_path);
 
+    // TODO: Get password from config when encryption UI is implemented
+    let password = config.encryption_password.as_deref();
+
     match backup::compress_folder(
         &config_id,
         source_path,
@@ -176,6 +179,7 @@ pub async fn run_backup_now(
         &config.backup_type,
         previous_manifest.as_ref(),
         Some(&app),
+        password,
     ) {
         Ok(mut job) => {
             job.config_id = config_id.clone();
@@ -195,6 +199,7 @@ pub async fn run_backup_now(
                 cfg.last_backup_original_size = job.original_size;
                 cfg.last_backup_compressed_size = job.compressed_size;
                 cfg.last_backup_files_count = job.files_count;
+                cfg.last_backup_checksum = job.checksum.clone();
                 cfg.updated_at = job.completed_at.unwrap_or(0);
             }
             drop(configs);
@@ -341,6 +346,8 @@ pub async fn list_available_backups(config_id: String, state: State<'_, AppState
 pub async fn restore_backup(
     backup_file_path: String,
     restore_destination: String,
+    expected_checksum: Option<String>,
+    password: Option<String>,
 ) -> Result<backup::RestoreResult, String> {
     let backup_path = Path::new(&backup_file_path);
     let restore_path = Path::new(&restore_destination);
@@ -349,5 +356,5 @@ pub async fn restore_backup(
         return Err("Backup file not found".to_string());
     }
 
-    backup::restore_backup(backup_path, restore_path)
+    backup::restore_backup(backup_path, restore_path, expected_checksum, password.as_deref())
 }

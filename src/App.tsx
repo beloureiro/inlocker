@@ -33,6 +33,10 @@ function App() {
       created_at: timestamp,
       updated_at: timestamp,
       last_backup_at: null,
+      last_backup_original_size: null,
+      last_backup_compressed_size: null,
+      last_backup_files_count: null,
+      last_backup_checksum: null,
     };
 
     await saveConfig(newConfig);

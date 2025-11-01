@@ -1,8 +1,9 @@
-mod backup;
+pub mod backup;
+pub mod crypto;
 mod commands;
 mod launchd;
 mod scheduler;
-mod types;
+pub mod types;
 
 use commands::AppState;
 use scheduler::SchedulerState;
@@ -148,6 +149,7 @@ async fn run_scheduled_backup(app: &tauri::AppHandle, config_id: &str) -> Result
     };
 
     // Perform backup
+    // TODO: Add password parameter when CLI supports it
     match backup::compress_folder(
         &config_id,
         source_path,
@@ -155,6 +157,7 @@ async fn run_scheduled_backup(app: &tauri::AppHandle, config_id: &str) -> Result
         &config.backup_type,
         previous_manifest.as_ref(),
         Some(app),
+        None, // No encryption for CLI mode yet
     ) {
         Ok(job) => {
             log::info!("Backup completed: {} files, {} bytes",

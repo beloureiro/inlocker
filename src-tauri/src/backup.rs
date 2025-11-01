@@ -1,3 +1,4 @@
+use crate::crypto::{decrypt, encrypt, EncryptionMetadata};
 use crate::types::{BackupJob, BackupManifest, BackupStatus, BackupType, FileMetadata};
 use std::collections::HashMap;
 use std::fs;
@@ -15,7 +16,12 @@ pub struct BackupProgress {
     pub details: Option<String>,
 }
 
-/// Compress a folder using zstd
+/// Compress a folder using zstd with optional AES-256-GCM encryption
+///
+/// # Security
+/// - If password is provided, backup is encrypted with AES-256-GCM
+/// - Encryption metadata (salt, nonce) is embedded in the file
+/// - Password is derived using Argon2id (RFC 9106)
 pub fn compress_folder(
     config_id: &str,
     source_path: &Path,
@@ -23,6 +29,7 @@ pub fn compress_folder(
     backup_type: &BackupType,
     previous_manifest: Option<&BackupManifest>,
     app: Option<&tauri::AppHandle>,
+    password: Option<&str>,
 ) -> Result<BackupJob, String> {
     // Helper to emit progress
     let emit_progress = |stage: &str, message: &str, details: Option<String>| {
@@ -55,7 +62,9 @@ pub fn compress_folder(
         BackupType::Full => "full",
         BackupType::Incremental => "incr",
     };
-    let backup_filename = format!("backup_{}_{}.tar.zst", backup_type_str, timestamp);
+    let is_encrypted = password.is_some();
+    let extension = if is_encrypted { ".tar.zst.enc" } else { ".tar.zst" };
+    let backup_filename = format!("backup_{}_{}{}", backup_type_str, timestamp, extension);
     let backup_path = dest_path.join(&backup_filename);
 
     log::info!("📋 Scanning files...");
@@ -92,11 +101,37 @@ pub fn compress_folder(
         compression_ratio
     );
 
+    // Encrypt if password provided
+    let (final_data, _encryption_metadata) = if let Some(pwd) = password {
+        log::info!("🔐 Encrypting with AES-256-GCM...");
+        emit_progress("encrypting", "Encrypting backup", Some(format!("{:.1} MB", compressed_size as f64 / 1_048_576.0)));
+
+        let (encrypted, metadata) = encrypt(&compressed_data, pwd)
+            .map_err(|e| format!("Encryption failed: {}", e))?;
+
+        // Embed metadata in file format: [4-byte length][metadata JSON][encrypted data]
+        let metadata_json = serde_json::to_vec(&metadata)
+            .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
+
+        let metadata_len = metadata_json.len() as u32;
+        let mut final_data = Vec::with_capacity(4 + metadata_json.len() + encrypted.len());
+        final_data.extend_from_slice(&metadata_len.to_le_bytes());
+        final_data.extend_from_slice(&metadata_json);
+        final_data.extend_from_slice(&encrypted);
+
+        log::info!("✅ Backup encrypted ({:.2} MB)", final_data.len() as f64 / 1_048_576.0);
+        (final_data, Some(metadata))
+    } else {
+        (compressed_data, None)
+    };
+
+    let final_size = final_data.len() as u64;
+
     // Write to destination
     log::info!("💾 Writing backup file: {}", backup_filename);
-    emit_progress("writing", "Writing backup file", Some(format!("{:.1} MB", compressed_size as f64 / 1_048_576.0)));
+    emit_progress("writing", "Writing backup file", Some(format!("{:.1} MB", final_size as f64 / 1_048_576.0)));
     fs::create_dir_all(dest_path).map_err(|e| format!("Failed to create dest dir: {}", e))?;
-    fs::write(&backup_path, compressed_data)
+    fs::write(&backup_path, final_data)
         .map_err(|e| format!("Failed to write backup: {}", e))?;
     log::info!("✅ Backup file saved");
 
@@ -288,8 +323,16 @@ pub fn build_manifest(config_id: &str, files: &[PathBuf], base_path: &Path) -> R
                 .unwrap()
                 .as_secs() as i64;
 
-            // Simple checksum based on size + mtime (could use actual file hash for better accuracy)
-            let checksum = format!("{}:{}", metadata.len(), modified_at);
+            // 🔒 SECURITY FIX: Use SHA-256 of file contents instead of size+mtime
+            // Previous implementation: format!("{}:{}", metadata.len(), modified_at)
+            // Vulnerability: Two files with same size and timestamp would have identical checksums
+            // Fix: Calculate actual SHA-256 hash of file contents
+            let checksum = calculate_file_checksum(file_path)
+                .unwrap_or_else(|e| {
+                    log::warn!("Failed to calculate checksum for {:?}: {}, using fallback", file_path, e);
+                    // Fallback to size+mtime if file read fails (e.g., permission denied)
+                    format!("fallback:{}:{}", metadata.len(), modified_at)
+                });
 
             file_map.insert(
                 relative_path.clone(),
@@ -313,30 +356,155 @@ pub fn build_manifest(config_id: &str, files: &[PathBuf], base_path: &Path) -> R
     })
 }
 
-/// Restore a backup from a compressed file
+/// Calculate SHA-256 checksum of a file's contents
+fn calculate_file_checksum(file_path: &Path) -> Result<String, String> {
+    use ring::digest::{Context, SHA256};
+
+    let mut file = fs::File::open(file_path)
+        .map_err(|e| format!("Failed to open file for checksum: {}", e))?;
+
+    let mut context = Context::new(&SHA256);
+    let mut buffer = [0; 8192];
+
+    loop {
+        let count = file
+            .read(&mut buffer)
+            .map_err(|e| format!("Failed to read file: {}", e))?;
+        if count == 0 {
+            break;
+        }
+        context.update(&buffer[..count]);
+    }
+
+    let digest = context.finish();
+    Ok(hex::encode(digest.as_ref()))
+}
+
+/// Restore a backup from a compressed/encrypted file
+///
+/// # Security
+/// - If backup is encrypted (.enc extension), password is required
+/// - Verifies integrity via SHA-256 checksum before restore
+/// - Decrypts with AES-256-GCM if needed
 pub fn restore_backup(
     backup_file_path: &Path,
     restore_destination: &Path,
+    expected_checksum: Option<String>,
+    password: Option<&str>,
 ) -> Result<RestoreResult, String> {
     let started_at = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64;
 
-    // Read compressed file
-    let compressed_data = fs::read(backup_file_path)
+    // Verify integrity if checksum is provided
+    if let Some(expected) = expected_checksum {
+        log::info!("🔍 Verifying backup integrity...");
+        let actual_checksum = calculate_checksum(backup_file_path)?;
+
+        // 🔒 SECURITY NOTE: Constant-time comparison for checksums
+        // While checksums are typically public data (not secrets), we use constant-time
+        // comparison as a defense-in-depth measure to prevent potential timing attacks.
+        // For true secret comparison (passwords, keys), use dedicated crypto libraries.
+
+        fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+            if a.len() != b.len() {
+                return false;
+            }
+            let mut result = 0u8;
+            for (x, y) in a.iter().zip(b.iter()) {
+                result |= x ^ y;
+            }
+            result == 0
+        }
+
+        let checksum_match = constant_time_eq(
+            actual_checksum.as_bytes(),
+            expected.as_bytes()
+        );
+
+        if !checksum_match {
+            log::error!("❌ Checksum mismatch!");
+            log::error!("   Expected: {}", &expected[..16]);
+            log::error!("   Actual:   {}", &actual_checksum[..16]);
+            return Err(format!(
+                "Backup file integrity check failed! The file may be corrupted. Expected checksum: {}..., Got: {}...",
+                &expected[..16],
+                &actual_checksum[..16]
+            ));
+        }
+        log::info!("✅ Integrity verified - checksum matches");
+    } else {
+        log::warn!("⚠️  No checksum provided - skipping integrity verification");
+    }
+
+    // Read backup file (possibly encrypted)
+    let file_data = fs::read(backup_file_path)
         .map_err(|e| format!("Failed to read backup file: {}", e))?;
 
+    // Check if file is encrypted (based on extension)
+    let is_encrypted = backup_file_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e == "enc")
+        .unwrap_or(false);
+
+    // Decrypt if needed
+    let compressed_data = if is_encrypted {
+        log::info!("🔓 Decrypting backup...");
+
+        let pwd = password.ok_or_else(|| {
+            "Backup is encrypted but no password provided. Please provide the password used during backup.".to_string()
+        })?;
+
+        // Extract metadata from file: [4-byte length][metadata JSON][encrypted data]
+        if file_data.len() < 4 {
+            return Err("Invalid encrypted file: too short".to_string());
+        }
+
+        let metadata_len = u32::from_le_bytes([
+            file_data[0],
+            file_data[1],
+            file_data[2],
+            file_data[3],
+        ]) as usize;
+
+        if file_data.len() < 4 + metadata_len {
+            return Err("Invalid encrypted file: metadata truncated".to_string());
+        }
+
+        let metadata_json = &file_data[4..4 + metadata_len];
+        let metadata: EncryptionMetadata = serde_json::from_slice(metadata_json)
+            .map_err(|e| format!("Failed to parse encryption metadata: {}", e))?;
+
+        let encrypted_data = &file_data[4 + metadata_len..];
+
+        let decrypted = decrypt(encrypted_data, pwd, &metadata)
+            .map_err(|e| format!("Decryption failed: {}. Please verify your password is correct.", e))?;
+
+        log::info!("✅ Backup decrypted successfully");
+        decrypted
+    } else {
+        if password.is_some() {
+            log::warn!("⚠️  Password provided but backup is not encrypted - ignoring password");
+        }
+        file_data
+    };
+
     // Decompress with zstd
+    log::info!("📦 Decompressing backup...");
     let tar_data = decompress_with_zstd(&compressed_data)?;
 
     // Extract tar archive
+    log::info!("📂 Extracting files...");
     let files_extracted = extract_tar_archive(&tar_data, restore_destination)?;
 
     let completed_at = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64;
+
+    log::info!("✅ Restore completed successfully - {} files extracted", files_extracted);
 
     Ok(RestoreResult {
         success: true,
@@ -445,4 +613,69 @@ pub struct BackupInfo {
     pub path: String,
     pub size: u64,
     pub created_at: i64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::io::Write;
+
+    #[test]
+    fn test_checksum_calculation() {
+        // Create temp file
+        let temp_dir = std::env::temp_dir();
+        let test_file = temp_dir.join("test_checksum.txt");
+        let mut file = fs::File::create(&test_file).unwrap();
+        file.write_all(b"test data for checksum").unwrap();
+
+        // Calculate checksum
+        let checksum = calculate_checksum(&test_file).unwrap();
+
+        // Verify checksum is hex string with correct length (SHA-256 = 64 chars)
+        assert_eq!(checksum.len(), 64);
+        assert!(checksum.chars().all(|c| c.is_ascii_hexdigit()));
+
+        // Calculate again - should be same
+        let checksum2 = calculate_checksum(&test_file).unwrap();
+        assert_eq!(checksum, checksum2);
+
+        // Cleanup
+        fs::remove_file(&test_file).ok();
+    }
+
+    #[test]
+    fn test_compression_decompression() {
+        // Create test data
+        let test_data = b"Hello World! This is test data for compression.".repeat(100);
+
+        // Compress
+        let compressed = compress_with_zstd(&test_data).unwrap();
+
+        // Verify compressed is smaller
+        assert!(compressed.len() < test_data.len());
+
+        // Decompress
+        let decompressed = decompress_with_zstd(&compressed).unwrap();
+
+        // Verify data matches
+        assert_eq!(&test_data[..], &decompressed[..]);
+    }
+
+    #[test]
+    fn test_manifest_operations() {
+        let temp_dir = std::env::temp_dir();
+        let test_file = temp_dir.join("manifest_test.txt");
+        fs::write(&test_file, b"test").unwrap();
+
+        let files = vec![test_file.clone()];
+        let manifest = build_manifest("test-id", &files, &temp_dir).unwrap();
+
+        // Verify manifest contains file
+        assert_eq!(manifest.config_id, "test-id");
+        assert!(manifest.files.contains_key("manifest_test.txt"));
+
+        // Cleanup
+        fs::remove_file(&test_file).ok();
+    }
 }
