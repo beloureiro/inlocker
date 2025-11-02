@@ -1,5 +1,5 @@
 use inlocker_lib::backup::{compress_folder, restore_backup};
-use inlocker_lib::types::BackupType;
+use inlocker_lib::types::{BackupMode, BackupType};
 use std::fs;
 use std::io::Write;
 
@@ -30,6 +30,7 @@ fn test_detect_corrupted_backup() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -99,6 +100,7 @@ fn test_large_file_integrity() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -164,6 +166,7 @@ fn test_special_filenames() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -224,6 +227,7 @@ fn test_deep_directory_structure() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -283,6 +287,7 @@ fn test_many_small_files() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,

@@ -155,6 +155,7 @@ async fn run_scheduled_backup(app: &tauri::AppHandle, config_id: &str) -> Result
         source_path,
         dest_path,
         &config.backup_type,
+        &config.mode,
         previous_manifest.as_ref(),
         Some(app),
         None, // No encryption for CLI mode yet

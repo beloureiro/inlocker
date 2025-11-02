@@ -11,7 +11,9 @@ pub struct BackupConfig {
     #[serde(default)]
     pub schedule: Option<ScheduleConfig>,
     pub enabled: bool,
-    pub encrypt: bool,
+    /// Backup mode: Copy (no compression), Compressed (default), or Encrypted (compressed + encrypted)
+    #[serde(default = "default_backup_mode")]
+    pub mode: BackupMode,
     /// Encryption password (NEVER persisted to disk for security)
     /// User must provide this each time for encrypted backups
     #[serde(skip_serializing, default)]
@@ -36,6 +38,10 @@ fn default_backup_type() -> BackupType {
     BackupType::Incremental
 }
 
+fn default_backup_mode() -> BackupMode {
+    BackupMode::Compressed
+}
+
 /// Scheduling configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScheduleConfig {
@@ -56,12 +62,24 @@ pub enum SchedulePreset {
     Custom,
 }
 
-/// Type of backup
+/// Type of backup (Full or Incremental)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum BackupType {
     Full,
     Incremental,
+}
+
+/// Backup mode (determines compression and encryption)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum BackupMode {
+    /// Copy only - no compression, no encryption (fastest)
+    Copy,
+    /// Compressed - with zstd compression (default)
+    Compressed,
+    /// Encrypted - compressed + AES-256-GCM encryption (most secure)
+    Encrypted,
 }
 
 /// Represents a backup job execution

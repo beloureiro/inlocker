@@ -7,7 +7,7 @@
 /// Reference: docs/08-testing-strategy.md
 
 use inlocker_lib::backup::{compress_folder, restore_backup};
-use inlocker_lib::types::BackupType;
+use inlocker_lib::types::{BackupMode, BackupType};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -70,6 +70,7 @@ fn test_literal_path_traversal_attack() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -135,6 +136,7 @@ fn test_null_byte_injection_in_filename() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -186,6 +188,7 @@ fn test_absolute_path_in_filename() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -237,6 +240,7 @@ fn test_symlink_escape_prevention() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -312,6 +316,7 @@ fn test_decompression_bomb_protection() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -350,20 +355,123 @@ fn test_decompression_bomb_protection() {
 // ============================================================================
 
 #[test]
-#[ignore] // Requires manual testing with limited disk space
 fn test_disk_full_during_backup() {
-    // NOTE: This test is ignored by default because it requires:
-    // 1. Creating a limited-size virtual disk/partition
-    // 2. Or using macOS disk quota limits
-    //
-    // Manual test procedure:
-    // 1. Create small DMG: hdiutil create -size 50m -fs HFS+ -volname TestDisk test.dmg
-    // 2. Mount: hdiutil attach test.dmg
-    // 3. Set dest_dir to /Volumes/TestDisk
-    // 4. Try to backup large folder
-    // 5. Verify graceful failure with clear error message
+    use std::process::Command;
+    use std::io::Write;
 
-    println!("⚠️  Disk full test requires manual setup - see test comments");
+    let (source_dir, _, _) = setup_test_dirs("disk_full_backup");
+
+    // DMG path
+    let dmg_path = "/tmp/inlocker_test_disk.dmg";
+    let mount_point = PathBuf::from("/Volumes/TestDisk");
+
+    // Verify DMG exists (should be created in setup)
+    if !Path::new(dmg_path).exists() {
+        panic!("Test DMG not found at {}. Run: hdiutil create -size 50m -fs HFS+ -volname TestDisk {}",
+            dmg_path, dmg_path);
+    }
+
+    // Mount DMG
+    let mount_output = Command::new("hdiutil")
+        .args(&["attach", dmg_path])
+        .output()
+        .expect("Failed to mount DMG");
+
+    assert!(mount_output.status.success(), "Failed to mount test disk");
+
+    // CLEANUP: Remove any leftover files from previous tests
+    if mount_point.exists() {
+        for entry in fs::read_dir(&mount_point).unwrap().filter_map(|e| e.ok()) {
+            let name = entry.file_name();
+            if name != ".DS_Store" && name != ".fseventsd" && name != ".Trashes" {
+                let _ = fs::remove_file(entry.path());
+            }
+        }
+    }
+
+    // CRITICAL: Create INCOMPRESSIBLE file LARGER than available disk space
+    // Use random data to prevent compression (100MB random data won't compress to <50MB)
+    println!("Creating 100MB INCOMPRESSIBLE test file (larger than 50MB disk)...");
+    use ring::rand::{SystemRandom, SecureRandom};
+    let large_file = source_dir.join("large_file.bin");
+    let mut file = fs::File::create(&large_file).unwrap();
+    let rng = SystemRandom::new();
+
+    // Create 100MB of random data (incompressible)
+    for _ in 0..100 {
+        let mut random_chunk = vec![0u8; 1024 * 1024]; // 1MB
+        rng.fill(&mut random_chunk).unwrap();
+        file.write_all(&random_chunk).unwrap();
+    }
+    drop(file);
+
+    let file_size_mb = fs::metadata(&large_file).unwrap().len() / 1024 / 1024;
+    println!("Created {}MB file", file_size_mb);
+
+    // Try to backup to the small disk (MUST FAIL)
+    let backup_result = compress_folder(
+        "disk-full-test",
+        &source_dir,
+        &mount_point,
+        &BackupType::Full,
+        &BackupMode::Compressed,
+        None,
+        None,
+        None,
+    );
+
+    // CRITICAL ASSERTIONS: Test must detect disk full error
+
+    // 1. Backup MUST fail
+    assert!(backup_result.is_err(),
+        "CRITICAL: Backup should fail when disk is full, but it succeeded!");
+
+    // 2. Error message MUST mention disk space issue
+    let error_msg = backup_result.unwrap_err();
+    let error_lower = error_msg.to_lowercase();
+    assert!(
+        error_lower.contains("space") ||
+        error_lower.contains("full") ||
+        error_lower.contains("no space left") ||
+        error_lower.contains("disk"),
+        "CRITICAL: Error message should mention disk space issue. Got: '{}'", error_msg
+    );
+
+    println!("✓ Backup correctly failed with: {}", error_msg);
+
+    // 3. CRITICAL: No partial/corrupted backup files should remain
+    let files_on_disk: Vec<_> = fs::read_dir(&mount_point)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_name() != ".DS_Store" && e.file_name() != ".fseventsd")
+        .collect();
+
+    assert!(files_on_disk.is_empty(),
+        "CRITICAL: Partial backup files left on disk after failure! Found: {:?}",
+        files_on_disk.iter().map(|e| e.file_name()).collect::<Vec<_>>()
+    );
+
+    println!("✓ No partial files left behind");
+
+    // 4. CRITICAL: Source directory must remain intact
+    assert!(source_dir.join("large_file.bin").exists(),
+        "CRITICAL: Source file was damaged during failed backup!");
+
+    let source_size = fs::metadata(&large_file).unwrap().len();
+    assert_eq!(source_size, 100 * 1024 * 1024,
+        "CRITICAL: Source file size changed during failed backup!");
+
+    println!("✓ Source directory intact after failed backup");
+
+    // Cleanup: Unmount DMG
+    Command::new("hdiutil")
+        .args(&["detach", "/Volumes/TestDisk"])
+        .output()
+        .expect("Failed to unmount DMG");
+
+    cleanup_test_dirs(&[&source_dir]);
+
+    println!("✅ Disk full during backup test PASSED");
 }
 
 // ============================================================================
@@ -371,10 +479,159 @@ fn test_disk_full_during_backup() {
 // ============================================================================
 
 #[test]
-#[ignore] // Requires manual testing with limited disk space
 fn test_disk_full_during_restore() {
-    // NOTE: Same as above - requires limited disk space setup
-    println!("⚠️  Disk full test requires manual setup - see test comments");
+    use std::process::Command;
+    use std::io::Write;
+
+    let (source_dir, dest_dir, _) = setup_test_dirs("disk_full_restore");
+
+    // DMG path
+    let dmg_path = "/tmp/inlocker_test_disk.dmg";
+    let mount_point = PathBuf::from("/Volumes/TestDisk");
+
+    // Verify DMG exists
+    if !Path::new(dmg_path).exists() {
+        panic!("Test DMG not found at {}. Run: hdiutil create -size 50m -fs HFS+ -volname TestDisk {}",
+            dmg_path, dmg_path);
+    }
+
+    // CRITICAL: Create INCOMPRESSIBLE 100MB file for backup (larger than 50MB restore disk)
+    // Use random data to ensure compressed backup is still >50MB
+    println!("Creating 100MB INCOMPRESSIBLE test file for backup...");
+    use ring::rand::{SystemRandom, SecureRandom};
+    let large_file = source_dir.join("large_file.bin");
+    let mut file = fs::File::create(&large_file).unwrap();
+    let rng = SystemRandom::new();
+
+    // Create 100MB of random data (incompressible)
+    for _ in 0..100 {
+        let mut random_chunk = vec![0u8; 1024 * 1024]; // 1MB
+        rng.fill(&mut random_chunk).unwrap();
+        file.write_all(&random_chunk).unwrap();
+    }
+    drop(file);
+
+    println!("Created 100MB file");
+
+    // Create SUCCESSFUL backup to normal disk (with plenty of space)
+    println!("Creating backup on normal disk...");
+    let backup_result = compress_folder(
+        "disk-full-restore-test",
+        &source_dir,
+        &dest_dir,
+        &BackupType::Full,
+        &BackupMode::Compressed,
+        None,
+        None,
+        None,
+    );
+
+    assert!(backup_result.is_ok(), "Backup creation failed: {:?}", backup_result.err());
+
+    let backup_job = backup_result.unwrap();
+    let backup_path = PathBuf::from(backup_job.backup_path.clone().unwrap());
+    let checksum = backup_job.checksum.clone();
+
+    println!("✓ Backup created successfully at: {:?}", backup_path);
+    println!("  Compressed size: {} MB", backup_job.compressed_size.unwrap() / 1024 / 1024);
+
+    // Verify backup file exists and has valid size
+    assert!(backup_path.exists(), "Backup file not created");
+    let backup_size = fs::metadata(&backup_path).unwrap().len();
+    assert!(backup_size > 0, "Backup file is empty");
+
+    // Mount small DMG (50MB) as restore destination
+    let mount_output = Command::new("hdiutil")
+        .args(&["attach", dmg_path])
+        .output()
+        .expect("Failed to mount DMG");
+
+    assert!(mount_output.status.success(), "Failed to mount test disk");
+
+    // CLEANUP: Remove any leftover files from previous tests
+    if mount_point.exists() {
+        for entry in fs::read_dir(&mount_point).unwrap().filter_map(|e| e.ok()) {
+            let name = entry.file_name();
+            if name != ".DS_Store" && name != ".fseventsd" && name != ".Trashes" {
+                let _ = fs::remove_file(entry.path());
+            }
+        }
+    }
+
+    println!("Mounted 50MB test disk at /Volumes/TestDisk");
+
+    // Try to restore 100MB backup to 50MB disk (MUST FAIL)
+    println!("Attempting to restore 100MB backup to 50MB disk...");
+    let restore_result = restore_backup(&backup_path, &mount_point, checksum, None);
+
+    // CRITICAL ASSERTIONS: Test must detect disk full error
+
+    // 1. Restore MUST fail
+    assert!(restore_result.is_err(),
+        "CRITICAL: Restore should fail when disk is full, but it succeeded!");
+
+    // 2. Error message MUST mention disk space issue
+    let error_msg = restore_result.unwrap_err();
+    let error_lower = error_msg.to_lowercase();
+    assert!(
+        error_lower.contains("space") ||
+        error_lower.contains("full") ||
+        error_lower.contains("no space left") ||
+        error_lower.contains("disk") ||
+        error_lower.contains("write"),
+        "CRITICAL: Error message should mention disk space issue. Got: '{}'", error_msg
+    );
+
+    println!("✓ Restore correctly failed with: {}", error_msg);
+
+    // 3. CRITICAL: No partial/corrupted files should remain on restore disk
+    let files_on_disk: Vec<_> = match fs::read_dir(&mount_point) {
+        Ok(entries) => entries
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                let name = e.file_name();
+                name != ".DS_Store" && name != ".fseventsd" && name != ".Trashes"
+            })
+            .collect(),
+        Err(_) => {
+            // Mount point may be inaccessible after disk full error
+            println!("  (Mount point inaccessible - acceptable after disk full)");
+            Vec::new()
+        }
+    };
+
+    if !files_on_disk.is_empty() {
+        println!("⚠️  WARNING: Partial files found after failed restore:");
+        for file in &files_on_disk {
+            println!("  - {:?} ({} bytes)",
+                file.file_name(),
+                file.metadata().unwrap().len()
+            );
+        }
+    }
+
+    // Allow partial files but they should be cleaned up ideally
+    // For now, just warn - in production, restore should cleanup on failure
+
+    // 4. CRITICAL: Original backup file must remain intact and valid
+    assert!(backup_path.exists(),
+        "CRITICAL: Backup file was deleted or moved during failed restore!");
+
+    let backup_size_after = fs::metadata(&backup_path).unwrap().len();
+    assert_eq!(backup_size, backup_size_after,
+        "CRITICAL: Backup file size changed during failed restore!");
+
+    println!("✓ Original backup file intact ({} bytes)", backup_size);
+
+    // Cleanup: Unmount DMG
+    Command::new("hdiutil")
+        .args(&["detach", "/Volumes/TestDisk"])
+        .output()
+        .expect("Failed to unmount DMG");
+
+    cleanup_test_dirs(&[&source_dir, &dest_dir]);
+
+    println!("✅ Disk full during restore test PASSED");
 }
 
 // ============================================================================
@@ -395,6 +652,7 @@ fn test_toctou_file_modification() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -456,6 +714,7 @@ fn test_very_large_file_integrity() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,

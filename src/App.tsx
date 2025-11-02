@@ -28,7 +28,7 @@ function App() {
       destination_path: destinationPath,
       schedule: null,
       enabled: true,
-      encrypt: false,
+      mode: 'compressed', // Default to compressed mode
       backup_type: backupType,
       created_at: timestamp,
       updated_at: timestamp,

@@ -156,18 +156,44 @@ pub async fn run_backup_now(
         .clone();
     drop(configs); // Release lock
 
+    // Get paths first
+    let source_path = Path::new(&config.source_path);
+    let dest_path = Path::new(&config.destination_path);
+
     // Load previous manifest for incremental backup
+    // BUT only if physical backup files actually exist on disk
     let manifest_path = get_manifest_path(&app, &config_id)?;
     let previous_manifest = if manifest_path.exists() && config.backup_type == BackupType::Incremental {
-        let json = fs::read_to_string(&manifest_path).ok();
-        json.and_then(|j| serde_json::from_str::<BackupManifest>(&j).ok())
+        // First load manifest
+        let loaded_manifest = fs::read_to_string(&manifest_path)
+            .ok()
+            .and_then(|j| serde_json::from_str::<BackupManifest>(&j).ok());
+
+        if let Some(manifest) = loaded_manifest {
+            // Verify physical backup exists and matches manifest
+            match backup::verify_physical_backup_exists(dest_path, &config.mode, &manifest) {
+                Ok(true) => {
+                    log::info!("✅ Physical backup verified - using manifest for incremental");
+                    Some(manifest)
+                },
+                Ok(false) => {
+                    log::warn!("⚠️  Manifest exists but physical backup missing/corrupted - treating as first backup");
+                    // Delete stale manifest
+                    let _ = fs::remove_file(&manifest_path);
+                    None
+                },
+                Err(e) => {
+                    log::error!("❌ Failed to verify backup: {} - treating as first backup", e);
+                    None
+                }
+            }
+        } else {
+            log::warn!("⚠️  Failed to parse manifest - treating as first backup");
+            None
+        }
     } else {
         None
     };
-
-    // Perform backup
-    let source_path = Path::new(&config.source_path);
-    let dest_path = Path::new(&config.destination_path);
 
     // TODO: Get password from config when encryption UI is implemented
     let password = config.encryption_password.as_deref();
@@ -177,6 +203,7 @@ pub async fn run_backup_now(
         source_path,
         dest_path,
         &config.backup_type,
+        &config.mode,
         previous_manifest.as_ref(),
         Some(&app),
         password,

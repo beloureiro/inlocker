@@ -5,7 +5,7 @@
 /// These tests are DESIGNED TO BE HARD and expose real vulnerabilities.
 
 use inlocker_lib::backup::{build_manifest, compress_folder, restore_backup, scan_all_files};
-use inlocker_lib::types::{BackupManifest, BackupType};
+use inlocker_lib::types::{BackupManifest, BackupMode, BackupType};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::os::unix::fs::PermissionsExt;
@@ -66,6 +66,7 @@ fn test_path_traversal_cannot_escape_backup() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -155,6 +156,7 @@ fn test_backup_with_concurrent_file_changes() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -205,6 +207,7 @@ fn test_extremely_deep_nesting() {
             &source_dir,
             &dest_dir,
             &BackupType::Full,
+        &BackupMode::Compressed,
             None,
             None,
             None,
@@ -296,6 +299,7 @@ fn test_extreme_file_sizes() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -354,6 +358,7 @@ fn test_unreadable_files_handling() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -397,6 +402,7 @@ fn test_detect_all_types_of_tampering() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -443,7 +449,7 @@ fn test_incremental_race_condition_safety() {
     fs::write(source_dir.join("file1.txt"), b"version 1").unwrap();
 
     // Full backup
-    compress_folder("race-test", &source_dir, &dest_dir, &BackupType::Full, None, None, None).unwrap();
+    compress_folder("race-test", &source_dir, &dest_dir, &BackupType::Full, &BackupMode::Compressed, None, None, None).unwrap();
 
     let (all_files, _) = scan_all_files(&source_dir).unwrap();
     let manifest = build_manifest("race-test", &all_files, &source_dir).unwrap();
@@ -458,6 +464,7 @@ fn test_incremental_race_condition_safety() {
         &source_dir,
         &dest_dir,
         &BackupType::Incremental,
+        &BackupMode::Compressed,
         Some(&manifest),
         None,
         None,
@@ -487,6 +494,7 @@ fn test_restore_overwrites_existing_files() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,

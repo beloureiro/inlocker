@@ -1,5 +1,5 @@
 use inlocker_lib::backup::{compress_folder, restore_backup};
-use inlocker_lib::types::BackupType;
+use inlocker_lib::types::{BackupMode, BackupType};
 use std::fs;
 
 /// Integration test: Complete backup and restore cycle using REAL functions
@@ -39,6 +39,7 @@ fn test_backup_restore_cycle() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None, // No app handle for testing
         None, // No encryption

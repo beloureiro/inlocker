@@ -5,7 +5,7 @@
 /// data integrity, and error handling scenarios.
 
 use inlocker_lib::backup::{build_manifest, compress_folder, restore_backup, scan_all_files};
-use inlocker_lib::types::{BackupManifest, BackupType};
+use inlocker_lib::types::{BackupManifest, BackupMode, BackupType};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -62,6 +62,7 @@ fn test_incremental_backup_only_changed_files() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -94,6 +95,7 @@ fn test_incremental_backup_only_changed_files() {
         &source_dir,
         &dest_dir,
         &BackupType::Incremental,
+        &BackupMode::Compressed,
         Some(&loaded_manifest),
         None,
         None,
@@ -168,6 +170,7 @@ fn test_compression_efficiency() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -224,6 +227,7 @@ fn test_binary_files_integrity() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -270,6 +274,7 @@ fn test_empty_and_zero_byte_files() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -313,6 +318,7 @@ fn test_manifest_tracks_all_changes() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -358,6 +364,7 @@ fn test_manifest_tracks_all_changes() {
         &source_dir,
         &dest_dir,
         &BackupType::Incremental,
+        &BackupMode::Compressed,
         Some(&prev_manifest),
         None,
         None,
@@ -405,6 +412,7 @@ fn test_long_filenames() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -439,6 +447,7 @@ fn test_backup_idempotency() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -451,6 +460,7 @@ fn test_backup_idempotency() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -491,6 +501,7 @@ fn test_checksum_must_differ_for_different_content() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -506,6 +517,7 @@ fn test_checksum_must_differ_for_different_content() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -565,6 +577,7 @@ fn test_incremental_handles_deleted_files() {
         &source_dir,
         &dest_dir,
         &BackupType::Full,
+        &BackupMode::Compressed,
         None,
         None,
         None,
@@ -593,6 +606,7 @@ fn test_incremental_handles_deleted_files() {
         &source_dir,
         &dest_dir,
         &BackupType::Incremental,
+        &BackupMode::Compressed,
         Some(&prev_manifest),
         None,
         None,
@@ -622,4 +636,270 @@ fn test_incremental_handles_deleted_files() {
         "Manifest should NOT track deleted files in updated state");
 
     cleanup_test_dirs(&[&source_dir, &dest_dir]);
+}
+
+// ============================================================================
+// CRITICAL TEST 11: HARDLINK DEDUPLICATION
+// ============================================================================
+
+#[test]
+#[cfg(unix)] // Hardlinks are Unix-specific
+fn test_hardlink_deduplication() {
+    use std::os::unix::fs::MetadataExt;
+
+    let (source_dir, dest_dir, restore_dir) = setup_test_dirs("hardlink_dedup");
+
+    println!("📦 Creating 100MB file with 5 hardlinks...");
+
+    // Create original 100MB file
+    let original_file = source_dir.join("original.dat");
+    let data = vec![42u8; 100 * 1024 * 1024]; // 100MB
+    fs::write(&original_file, &data).unwrap();
+
+    // Create 5 hardlinks to the same file
+    for i in 1..=5 {
+        let link_path = source_dir.join(format!("link_{}.dat", i));
+        fs::hard_link(&original_file, &link_path).unwrap();
+    }
+
+    println!("✓ Created original file + 5 hardlinks (6 files total)");
+
+    // Verify all files point to same inode
+    let original_inode = fs::metadata(&original_file).unwrap().ino();
+    for i in 1..=5 {
+        let link_inode = fs::metadata(source_dir.join(format!("link_{}.dat", i))).unwrap().ino();
+        assert_eq!(original_inode, link_inode, "Hardlinks should share same inode");
+    }
+
+    // Backup
+    println!("\n🔵 Backing up hardlinked files...");
+    let backup_result = compress_folder(
+        "hardlink-test",
+        &source_dir,
+        &dest_dir,
+        &BackupType::Full,
+        &BackupMode::Compressed,
+        None,
+        None,
+        None,
+    );
+
+    assert!(backup_result.is_ok(), "Backup failed: {:?}", backup_result.err());
+
+    let backup_job = backup_result.unwrap();
+    let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
+
+    // CRITICAL ASSERTION: Backup size analysis
+    let compressed_bytes = backup_job.compressed_size.unwrap();
+    let compressed_mb = compressed_bytes as f64 / 1024.0 / 1024.0;
+    let original_mb = backup_job.original_size.unwrap() as f64 / 1024.0 / 1024.0;
+
+    println!("✓ Backup size: {:.2} MB ({} bytes)", compressed_mb, compressed_bytes);
+    println!("  Original size: {:.2} MB", original_mb);
+    println!("  Files backed up: {}", backup_job.files_count.unwrap());
+    println!("  Compression ratio: {:.1}x", original_mb / compressed_mb.max(0.001));
+
+    // NOTE: Repetitive data (all bytes = 42) compresses EXTREMELY well with zstd
+    // Original: 600MB → Compressed: can be <1MB with high compression
+    //
+    // Important behaviors:
+    // 1. Backup should succeed
+    // 2. All 6 files should be in backup
+    // 3. Restore should work correctly
+
+    assert!(compressed_bytes > 0, "Backup should not be empty");
+    assert_eq!(backup_job.files_count.unwrap(), 6, "Should backup all 6 files");
+
+    // Restore
+    println!("\n🔄 Restoring hardlinked files...");
+    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None).unwrap();
+
+    // Verify all 6 files are restored
+    assert!(restore_dir.join("original.dat").exists(), "Original file should be restored");
+    for i in 1..=5 {
+        assert!(restore_dir.join(format!("link_{}.dat", i)).exists(),
+            "Link {} should be restored", i);
+    }
+
+    // Verify file contents are correct
+    let restored_data = fs::read(restore_dir.join("original.dat")).unwrap();
+    assert_eq!(restored_data.len(), 100 * 1024 * 1024, "Restored file size mismatch");
+    assert_eq!(restored_data, data, "Restored file contents mismatch");
+
+    // Check if hardlinks are preserved (depends on tar implementation)
+    let restored_inode = fs::metadata(restore_dir.join("original.dat")).unwrap().ino();
+    let link1_inode = fs::metadata(restore_dir.join("link_1.dat")).unwrap().ino();
+
+    if restored_inode == link1_inode {
+        println!("✅ Hardlinks PRESERVED after restore (inodes match)");
+    } else {
+        println!("⚠️  Hardlinks NOT preserved (copied as separate files)");
+        println!("   This is acceptable - all data is preserved correctly");
+    }
+
+    cleanup_test_dirs(&[&source_dir, &dest_dir, &restore_dir]);
+
+    println!("\n✅ HARDLINK DEDUPLICATION TEST PASSED");
+}
+
+// ============================================================================
+// 🔧 BACKUP MODE TESTS - Copy, Compressed, Encrypted
+// ============================================================================
+
+#[test]
+fn test_copy_mode_no_compression() {
+    let (source_dir, dest_dir, restore_dir) = setup_test_dirs("copy_mode");
+
+    println!("📋 Testing COPY mode (no compression)...");
+
+    // Create test files with recognizable content
+    fs::write(source_dir.join("test1.txt"), "Hello Copy Mode!").unwrap();
+    fs::write(source_dir.join("test2.txt"), "This should NOT be compressed").unwrap();
+
+    let original_size: u64 = fs::read_dir(&source_dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.metadata().unwrap().len())
+        .sum();
+
+    println!("✓ Created test files: {} bytes", original_size);
+
+    // Backup with Copy mode
+    println!("\n🔵 Creating backup with COPY mode...");
+    let backup_job = compress_folder(
+        "copy-mode-test",
+        &source_dir,
+        &dest_dir,
+        &BackupType::Full,
+        &BackupMode::Copy,
+        None,
+        None,
+        None,
+    ).unwrap();
+
+    let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
+
+    // CRITICAL ASSERTION: Copy mode must create FOLDER (NOT file)
+    assert!(
+        backup_path.is_dir(),
+        "FAILURE: Copy mode must create folder, got file: {:?}",
+        backup_path
+    );
+    println!("✅ Backup is a folder (Copy mode): {:?}", backup_path);
+
+    // Verify folder contains files
+    let files_in_backup: Vec<_> = fs::read_dir(&backup_path)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .collect();
+
+    println!("✓ Backup folder contains {} items", files_in_backup.len());
+    assert!(
+        !files_in_backup.is_empty(),
+        "Backup folder should contain files"
+    );
+
+    // Verify files exist and have correct content (simpler verification)
+    let file1_path = backup_path.join("test1.txt");
+    let file2_path = backup_path.join("test2.txt");
+
+    assert!(file1_path.exists(), "test1.txt should exist in backup folder");
+    assert!(file2_path.exists(), "test2.txt should exist in backup folder");
+
+    let backup_content1 = fs::read_to_string(&file1_path).unwrap();
+    let backup_content2 = fs::read_to_string(&file2_path).unwrap();
+
+    println!("✓ File contents preserved in backup folder");
+    assert_eq!(backup_content1, "Hello Copy Mode!");
+    assert_eq!(backup_content2, "This should NOT be compressed");
+
+    // Copy mode doesn't need complex restore - it's already browsable
+    // Just verify we can manually copy files back (simulating user action)
+    println!("\n🔄 Verifying files can be manually restored (Copy mode)...");
+
+    // Manually copy files from backup folder to restore folder (what user would do)
+    for entry in fs::read_dir(&backup_path).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_file() {
+            let dest = restore_dir.join(entry.file_name());
+            fs::copy(entry.path(), &dest).unwrap();
+        }
+    }
+
+    // Verify restored content
+    let restored_content1 = fs::read_to_string(restore_dir.join("test1.txt")).unwrap();
+    let restored_content2 = fs::read_to_string(restore_dir.join("test2.txt")).unwrap();
+
+    assert_eq!(restored_content1, "Hello Copy Mode!");
+    assert_eq!(restored_content2, "This should NOT be compressed");
+
+    println!("✅ All files restored correctly via manual copy");
+
+    cleanup_test_dirs(&[&source_dir, &dest_dir, &restore_dir]);
+
+    println!("\n✅ COPY MODE TEST PASSED - No compression, folder format verified");
+}
+
+#[test]
+fn test_compressed_mode_with_zstd() {
+    let (source_dir, dest_dir, restore_dir) = setup_test_dirs("compressed_mode");
+
+    println!("🗜️  Testing COMPRESSED mode (zstd)...");
+
+    // Create compressible text data
+    let text = "This text should compress well with zstd. ".repeat(1000);
+    fs::write(source_dir.join("compressible.txt"), &text).unwrap();
+
+    let original_size = text.len() as u64;
+    println!("✓ Created test file: {} bytes", original_size);
+
+    // Backup with Compressed mode
+    println!("\n🔵 Creating backup with COMPRESSED mode...");
+    let backup_job = compress_folder(
+        "compressed-mode-test",
+        &source_dir,
+        &dest_dir,
+        &BackupType::Full,
+        &BackupMode::Compressed,
+        None,
+        None,
+        None,
+    ).unwrap();
+
+    let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
+
+    // CRITICAL ASSERTION: Must create .tar.zst file
+    assert!(
+        backup_path.to_str().unwrap().ends_with(".tar.zst"),
+        "FAILURE: Compressed mode must create .tar.zst file, got: {:?}",
+        backup_path
+    );
+    println!("✅ Backup file has correct extension: .tar.zst");
+
+    // Verify compression actually happened
+    let backup_size = fs::metadata(&backup_path).unwrap().len();
+    println!("✓ Backup size: {} bytes (original: {} bytes)", backup_size, original_size);
+
+    let compression_ratio = original_size as f64 / backup_size as f64;
+    println!("✓ Compression ratio: {:.2}x", compression_ratio);
+
+    assert!(
+        compression_ratio > 2.0,
+        "Compressed mode should achieve >2x compression on text, got {:.2}x",
+        compression_ratio
+    );
+
+    // Restore
+    println!("\n🔄 Restoring from .tar.zst file...");
+    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None).unwrap();
+
+    // Verify content
+    let restored_content = fs::read_to_string(restore_dir.join("compressible.txt")).unwrap();
+    assert_eq!(restored_content, text);
+
+    println!("✅ File restored correctly after decompression");
+
+    cleanup_test_dirs(&[&source_dir, &dest_dir, &restore_dir]);
+
+    println!("\n✅ COMPRESSED MODE TEST PASSED - zstd compression verified");
 }

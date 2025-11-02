@@ -40,3 +40,5 @@ argon2 = "0.5"
 rand = "0.8"
 zeroize = "1.8"
 
+[dev-dependencies]
+sysinfo = "0.30"

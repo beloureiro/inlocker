@@ -1,5 +1,5 @@
 use crate::crypto::{decrypt, encrypt, EncryptionMetadata};
-use crate::types::{BackupJob, BackupManifest, BackupStatus, BackupType, FileMetadata};
+use crate::types::{BackupJob, BackupManifest, BackupMode, BackupStatus, BackupType, FileMetadata};
 use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
@@ -14,12 +14,19 @@ pub struct BackupProgress {
     pub stage: String,
     pub message: String,
     pub details: Option<String>,
+    pub current: Option<usize>,  // Files processed so far
+    pub total: Option<usize>,     // Total files to process
 }
 
-/// Compress a folder using zstd with optional AES-256-GCM encryption
+/// Backup a folder with support for 3 modes: Copy, Compressed, or Encrypted
+///
+/// # Modes
+/// - Copy: No compression (fastest, largest size)
+/// - Compressed: zstd compression level 3 (balanced)
+/// - Encrypted: zstd compression + AES-256-GCM encryption (most secure)
 ///
 /// # Security
-/// - If password is provided, backup is encrypted with AES-256-GCM
+/// - If mode is Encrypted, backup is encrypted with AES-256-GCM
 /// - Encryption metadata (salt, nonce) is embedded in the file
 /// - Password is derived using Argon2id (RFC 9106)
 pub fn compress_folder(
@@ -27,18 +34,21 @@ pub fn compress_folder(
     source_path: &Path,
     dest_path: &Path,
     backup_type: &BackupType,
+    mode: &BackupMode,
     previous_manifest: Option<&BackupManifest>,
     app: Option<&tauri::AppHandle>,
     password: Option<&str>,
 ) -> Result<BackupJob, String> {
     // Helper to emit progress
-    let emit_progress = |stage: &str, message: &str, details: Option<String>| {
+    let emit_progress = |stage: &str, message: &str, details: Option<String>, current: Option<usize>, total: Option<usize>| {
         if let Some(app_handle) = app {
             let _ = app_handle.emit("backup:progress", BackupProgress {
                 config_id: config_id.to_string(),
                 stage: stage.to_string(),
                 message: message.to_string(),
                 details,
+                current,
+                total,
             });
         }
     };
@@ -49,64 +59,179 @@ pub fn compress_folder(
     log::info!("📂 Source: {}", source_path.display());
     log::info!("💾 Destination: {}", dest_path.display());
 
-    emit_progress("starting", "Starting backup", None);
+    emit_progress("starting", "Starting backup", None, None, None);
 
     let started_at = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64;
 
-    // Generate backup filename with timestamp
+    // Generate timestamp for backup name
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
-    let backup_type_str = match backup_type {
-        BackupType::Full => "full",
-        BackupType::Incremental => "incr",
-    };
-    let is_encrypted = password.is_some();
-    let extension = if is_encrypted { ".tar.zst.enc" } else { ".tar.zst" };
-    let backup_filename = format!("backup_{}_{}{}", backup_type_str, timestamp, extension);
-    let backup_path = dest_path.join(&backup_filename);
 
     log::info!("📋 Scanning files...");
-    emit_progress("scanning", "Scanning files", None);
+    emit_progress("scanning", "Scanning files", None, None, None);
 
-    // Scan source folder and build file list
+    // Scan ALL files first (for comparison)
+    let (all_files, total_source_size) = scan_all_files(source_path)?;
+    let total_files_count = all_files.len();
+
+    // Determine which files to backup
     let (files_to_backup, total_size) = match backup_type {
-        BackupType::Full => scan_all_files(source_path)?,
-        BackupType::Incremental => scan_changed_files(source_path, previous_manifest)?,
+        BackupType::Full => (all_files, total_source_size),
+        BackupType::Incremental => {
+            if previous_manifest.is_none() {
+                // No previous backup - backup everything
+                (all_files, total_source_size)
+            } else {
+                // Has previous backup - find changed files
+                scan_changed_files(source_path, previous_manifest)?
+            }
+        }
     };
 
     let files_count = files_to_backup.len();
-    log::info!("✅ Found {} files ({:.2} MB)", files_count, total_size as f64 / 1_048_576.0);
+    log::info!("✅ Found {} files to backup ({:.2} MB)", files_count, total_size as f64 / 1_048_576.0);
     emit_progress(
         "scanned",
         &format!("Found {} files", files_count),
-        Some(format!("{:.1} MB", total_size as f64 / 1_048_576.0))
+        Some(format!("{:.1} MB", total_size as f64 / 1_048_576.0)),
+        Some(0),
+        Some(files_count)
     );
 
-    // Create tar archive with only files to backup
+    // Determine actual backup type based on reality (not just config)
+    // If backing up all files, it's FULL, otherwise it's INCREMENTAL
+    let actual_backup_type = if files_count == total_files_count {
+        "full"
+    } else {
+        "incr"
+    };
+
+    // Generate backup filename with InLocker branding
+    let backup_filename = match mode {
+        BackupMode::Copy => {
+            // Copy mode: folder name (no extension)
+            format!("Bkp_InLocker_{}_{}", actual_backup_type, timestamp)
+        },
+        BackupMode::Compressed => {
+            // Compressed: .tar.zst file
+            format!("Bkp_InLocker_{}_{}.tar.zst", actual_backup_type, timestamp)
+        },
+        BackupMode::Encrypted => {
+            // Encrypted: .tar.zst.enc file
+            format!("Bkp_InLocker_{}_{}.tar.zst.enc", actual_backup_type, timestamp)
+        }
+    };
+    let backup_path = dest_path.join(&backup_filename);
+
+    log::info!("📝 Backup will be saved as: {}", backup_filename);
+
+    // Handle Copy mode separately (direct copy, no TAR, no compression)
+    if mode == &BackupMode::Copy {
+        log::info!("📋 Copy mode - copying files directly (no TAR, no compression)");
+        emit_progress("copying", "Copying files directly", Some(format!("{} files", files_count)), Some(0), Some(files_count));
+
+        // Create backup folder
+        fs::create_dir_all(&backup_path)
+            .map_err(|e| format!("Failed to create copy destination: {}", e))?;
+
+        // Copy each file preserving structure
+        let mut copied_count = 0;
+        for file_path in &files_to_backup {
+            let relative_path = file_path.strip_prefix(source_path)
+                .map_err(|e| format!("Failed to get relative path: {}", e))?;
+            let dest_file = backup_path.join(relative_path);
+
+            // Create parent directories
+            if let Some(parent) = dest_file.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|e| format!("Failed to create directory: {}", e))?;
+            }
+
+            // Copy file
+            fs::copy(file_path, &dest_file)
+                .map_err(|e| format!("Failed to copy file: {}", e))?;
+            copied_count += 1;
+        }
+
+        log::info!("✅ Copied {} files directly to {}", copied_count, backup_path.display());
+
+        // Return early - Copy mode doesn't create archive file
+        let completed_at = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        return Ok(BackupJob {
+            id: uuid::Uuid::new_v4().to_string(),
+            config_id: config_id.to_string(),
+            status: BackupStatus::Completed,
+            backup_type: backup_type.clone(),
+            started_at,
+            completed_at: Some(completed_at),
+            original_size: Some(total_size),
+            compressed_size: Some(total_size), // Same size (no compression)
+            files_count: Some(files_count),
+            changed_files_count: if matches!(backup_type, BackupType::Incremental) { Some(files_count) } else { None },
+            error_message: None,
+            backup_path: Some(backup_path.to_string_lossy().to_string()),
+            checksum: None, // No checksum for direct copy
+        });
+    }
+
+    // For Compressed and Encrypted modes: Create TAR archive
     log::info!("📦 Creating TAR archive...");
-    emit_progress("creating_tar", "Creating TAR archive", Some(format!("{} files", files_count)));
-    let tar_data = create_tar_archive(&files_to_backup, source_path)?;
+    emit_progress("creating_tar", "Creating TAR archive", Some(format!("{} files", files_count)), Some(0), Some(files_count));
+
+    let tar_data = create_tar_archive(&files_to_backup, source_path, |current, total| {
+        emit_progress(
+            "creating_tar",
+            "Creating TAR archive",
+            Some(format!("{} files", current)),
+            Some(current),
+            Some(total)
+        );
+    })?;
+
     log::info!("✅ TAR archive created ({:.2} MB)", tar_data.len() as f64 / 1_048_576.0);
 
-    // Compress with zstd
-    log::info!("🗜️  Compressing with zstd (level 3)...");
-    emit_progress("compressing", "Compressing with zstd", Some(format!("{:.1} MB", tar_data.len() as f64 / 1_048_576.0)));
-    let compressed_data = compress_with_zstd(&tar_data)?;
-    let compressed_size = compressed_data.len() as u64;
-    let compression_ratio = (1.0 - (compressed_size as f64 / total_size.max(1) as f64)) * 100.0;
-    log::info!("✅ Compressed to {:.2} MB ({:.1}% compression)",
-        compressed_size as f64 / 1_048_576.0,
-        compression_ratio
-    );
+    // Compress based on mode
+    let (processed_data, compressed_size) = match mode {
+        BackupMode::Copy => {
+            unreachable!("Copy mode handled above")
+        },
+        BackupMode::Compressed => {
+            // Compressed mode: use zstd compression
+            log::info!("🗜️  Compressing with zstd (level 3)...");
+            emit_progress("compressing", "Compressing with zstd", Some(format!("{:.1} MB", tar_data.len() as f64 / 1_048_576.0)), None, None);
+            let compressed = compress_with_zstd(&tar_data)?;
+            let size = compressed.len() as u64;
+            let compression_ratio = (1.0 - (size as f64 / total_size.max(1) as f64)) * 100.0;
+            log::info!("✅ Compressed to {:.2} MB ({:.1}% compression)",
+                size as f64 / 1_048_576.0,
+                compression_ratio
+            );
+            (compressed, size)
+        },
+        BackupMode::Encrypted => {
+            // Encrypted mode: compress first, then encrypt
+            log::info!("🗜️  Compressing with zstd (level 3)...");
+            emit_progress("compressing", "Compressing with zstd", Some(format!("{:.1} MB", tar_data.len() as f64 / 1_048_576.0)), None, None);
+            let compressed = compress_with_zstd(&tar_data)?;
+            let size = compressed.len() as u64;
+            log::info!("✅ Compressed to {:.2} MB", size as f64 / 1_048_576.0);
+            (compressed, size)
+        }
+    };
 
-    // Encrypt if password provided
-    let (final_data, _encryption_metadata) = if let Some(pwd) = password {
+    // Encrypt if password provided (Encrypted mode only)
+    let (final_data, _encryption_metadata) = if mode == &BackupMode::Encrypted && password.is_some() {
+        let pwd = password.unwrap();
         log::info!("🔐 Encrypting with AES-256-GCM...");
-        emit_progress("encrypting", "Encrypting backup", Some(format!("{:.1} MB", compressed_size as f64 / 1_048_576.0)));
+        emit_progress("encrypting", "Encrypting backup", Some(format!("{:.1} MB", compressed_size as f64 / 1_048_576.0)), None, None);
 
-        let (encrypted, metadata) = encrypt(&compressed_data, pwd)
+        let (encrypted, metadata) = encrypt(&processed_data, pwd)
             .map_err(|e| format!("Encryption failed: {}", e))?;
 
         // Embed metadata in file format: [4-byte length][metadata JSON][encrypted data]
@@ -122,23 +247,35 @@ pub fn compress_folder(
         log::info!("✅ Backup encrypted ({:.2} MB)", final_data.len() as f64 / 1_048_576.0);
         (final_data, Some(metadata))
     } else {
-        (compressed_data, None)
+        (processed_data, None)
     };
 
     let final_size = final_data.len() as u64;
 
     // Write to destination
     log::info!("💾 Writing backup file: {}", backup_filename);
-    emit_progress("writing", "Writing backup file", Some(format!("{:.1} MB", final_size as f64 / 1_048_576.0)));
+    emit_progress("writing", "Writing backup file", Some(format!("{:.1} MB", final_size as f64 / 1_048_576.0)), None, None);
     fs::create_dir_all(dest_path).map_err(|e| format!("Failed to create dest dir: {}", e))?;
-    fs::write(&backup_path, final_data)
-        .map_err(|e| format!("Failed to write backup: {}", e))?;
+
+    // Write with cleanup on failure
+    if let Err(e) = fs::write(&backup_path, final_data) {
+        // CRITICAL: Clean up partial file on write failure
+        let _ = fs::remove_file(&backup_path);
+        return Err(format!("Failed to write backup: {}", e));
+    }
     log::info!("✅ Backup file saved");
 
     // Calculate checksum
     log::info!("🔒 Calculating SHA-256 checksum...");
-    emit_progress("checksum", "Calculating checksum", None);
-    let checksum = calculate_checksum(&backup_path)?;
+    emit_progress("checksum", "Calculating checksum", None, None, None);
+    let checksum = match calculate_checksum(&backup_path) {
+        Ok(sum) => sum,
+        Err(e) => {
+            // CRITICAL: Clean up backup file if checksum fails
+            let _ = fs::remove_file(&backup_path);
+            return Err(e);
+        }
+    };
     log::info!("✅ Checksum: {}", &checksum[..16]);
 
     let completed_at = SystemTime::now()
@@ -168,6 +305,134 @@ pub fn compress_folder(
         backup_path: Some(backup_path.to_string_lossy().to_string()),
         checksum: Some(checksum),
     })
+}
+
+/// Verify that physical backup files actually exist on disk
+/// This prevents using stale manifests when backup files were deleted
+pub fn verify_physical_backup_exists(
+    dest_path: &Path,
+    mode: &BackupMode,
+    manifest: &BackupManifest,
+) -> Result<bool, String> {
+    log::info!("🔍 Verifying physical backup existence...");
+
+    match mode {
+        BackupMode::Copy => {
+            // For Copy mode: verify backup folder exists and contains ALL files from manifest
+            // Find the most recent backup folder
+            let backup_folders: Vec<_> = fs::read_dir(dest_path)
+                .map_err(|e| format!("Failed to read destination: {}", e))?
+                .filter_map(|entry| entry.ok())
+                .filter(|entry| {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    entry.path().is_dir() &&
+                    (name.starts_with("Bkp_InLocker_") || name.starts_with("backup_")) // Support old format too
+                })
+                .collect();
+
+            if backup_folders.is_empty() {
+                log::warn!("⚠️  No backup folders found in {}", dest_path.display());
+                return Ok(false);
+            }
+
+            // Get most recent backup folder
+            let most_recent = backup_folders
+                .iter()
+                .max_by_key(|entry| {
+                    entry.metadata().ok()
+                        .and_then(|m| m.modified().ok())
+                        .unwrap_or(SystemTime::UNIX_EPOCH)
+                });
+
+            if let Some(backup_folder) = most_recent {
+                let backup_path = backup_folder.path();
+                log::info!("📂 Checking backup folder: {}", backup_path.display());
+
+                // Verify ALL files from manifest exist in backup folder
+                let mut missing_files = Vec::new();
+                for (relative_path, file_meta) in &manifest.files {
+                    let file_path = backup_path.join(relative_path);
+
+                    if !file_path.exists() {
+                        missing_files.push(relative_path.clone());
+                        continue;
+                    }
+
+                    // Also verify file size matches
+                    if let Ok(metadata) = fs::metadata(&file_path) {
+                        if metadata.len() != file_meta.size {
+                            log::warn!("⚠️  File {} size mismatch: expected {}, got {}",
+                                relative_path, file_meta.size, metadata.len());
+                            missing_files.push(relative_path.clone());
+                        }
+                    } else {
+                        missing_files.push(relative_path.clone());
+                    }
+                }
+
+                if !missing_files.is_empty() {
+                    log::warn!("⚠️  {} files missing or corrupted: {:?}",
+                        missing_files.len(), missing_files);
+                    return Ok(false);
+                }
+
+                log::info!("✅ All {} files verified in backup folder", manifest.files.len());
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        },
+        BackupMode::Compressed | BackupMode::Encrypted => {
+            // For archive modes: verify .tar.zst or .tar.zst.enc file exists
+            let extension = match mode {
+                BackupMode::Compressed => ".tar.zst",
+                BackupMode::Encrypted => ".tar.zst.enc",
+                _ => unreachable!(),
+            };
+
+            let backup_files: Vec<_> = fs::read_dir(dest_path)
+                .map_err(|e| format!("Failed to read destination: {}", e))?
+                .filter_map(|entry| entry.ok())
+                .filter(|entry| {
+                    entry.path().is_file() &&
+                    entry.file_name().to_string_lossy().ends_with(extension)
+                })
+                .collect();
+
+            if backup_files.is_empty() {
+                log::warn!("⚠️  No {} backup files found", extension);
+                return Ok(false);
+            }
+
+            // Get most recent backup file
+            let most_recent = backup_files
+                .iter()
+                .max_by_key(|entry| {
+                    entry.metadata().ok()
+                        .and_then(|m| m.modified().ok())
+                        .unwrap_or(SystemTime::UNIX_EPOCH)
+                });
+
+            if let Some(backup_file) = most_recent {
+                let backup_path = backup_file.path();
+
+                // Verify file has non-zero size
+                if let Ok(metadata) = fs::metadata(&backup_path) {
+                    if metadata.len() == 0 {
+                        log::warn!("⚠️  Backup file is empty: {}", backup_path.display());
+                        return Ok(false);
+                    }
+                    log::info!("✅ Backup file verified: {} ({} bytes)",
+                        backup_path.display(), metadata.len());
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            } else {
+                Ok(false)
+            }
+        }
+    }
 }
 
 /// Scan all files in a directory recursively
@@ -255,18 +520,27 @@ fn scan_changed_files(
 }
 
 /// Create a tar archive from file list
-fn create_tar_archive(files: &[PathBuf], base_path: &Path) -> Result<Vec<u8>, String> {
+fn create_tar_archive<F>(files: &[PathBuf], base_path: &Path, mut progress_callback: F) -> Result<Vec<u8>, String>
+where
+    F: FnMut(usize, usize),
+{
     let mut tar_data = Vec::new();
+    let total_files = files.len();
     {
         let mut tar = tar::Builder::new(&mut tar_data);
 
-        for file_path in files {
+        for (index, file_path) in files.iter().enumerate() {
             let relative_path = file_path
                 .strip_prefix(base_path)
                 .map_err(|e| format!("Failed to get relative path: {}", e))?;
 
             tar.append_path_with_name(file_path, relative_path)
                 .map_err(|e| format!("Failed to add file to tar: {}", e))?;
+
+            // Emit progress every 100 files or on last file
+            if (index + 1) % 100 == 0 || index + 1 == total_files {
+                progress_callback(index + 1, total_files);
+            }
         }
 
         tar.finish()
@@ -491,9 +765,21 @@ pub fn restore_backup(
         file_data
     };
 
-    // Decompress with zstd
-    log::info!("📦 Decompressing backup...");
-    let tar_data = decompress_with_zstd(&compressed_data)?;
+    // Decompress with zstd (only if compressed)
+    // Check file extension to determine if decompression is needed
+    let file_name = backup_file_path.file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+
+    let is_compressed = file_name.contains(".zst");
+
+    let tar_data = if is_compressed {
+        log::info!("📦 Decompressing backup...");
+        decompress_with_zstd(&compressed_data)?
+    } else {
+        log::info!("📋 Copy mode - no decompression needed");
+        compressed_data
+    };
 
     // Extract tar archive
     log::info!("📂 Extracting files...");

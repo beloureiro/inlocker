@@ -9,7 +9,8 @@ export interface BackupConfig {
   destination_path: string;
   schedule: ScheduleConfig | null;
   enabled: boolean;
-  encrypt: boolean;
+  mode: 'copy' | 'compressed' | 'encrypted'; // Backup mode: copy (no compression), compressed (default), or encrypted
+  encryption_password?: string; // Only for encrypted mode, never persisted
   backup_type: 'full' | 'incremental';
   created_at: number;
   updated_at: number;

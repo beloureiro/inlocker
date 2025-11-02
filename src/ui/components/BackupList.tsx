@@ -9,6 +9,8 @@ interface BackupProgress {
   stage: string;
   message: string;
   details?: string;
+  current?: number;  // Files processed so far
+  total?: number;     // Total files to process
 }
 
 export function BackupList() {
@@ -152,6 +154,27 @@ export function BackupList() {
     }
   };
 
+  const handleCancelBackup = (configId: string) => {
+    if (confirm('Are you sure you want to cancel this backup?')) {
+      setRunningBackups((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(configId);
+        return newSet;
+      });
+      setBackupProgress((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(configId);
+        return newMap;
+      });
+      setBackupResults((prev) =>
+        new Map(prev).set(configId, {
+          success: false,
+          message: 'Backup cancelled by user',
+        })
+      );
+    }
+  };
+
   const handleRestore = async (configId: string) => {
     try {
       // List available backups
@@ -245,10 +268,11 @@ export function BackupList() {
         return (
           <div
             key={config.id}
-            className="bg-gray-900 rounded border border-gray-800 p-3 hover:border-gray-700 transition-colors"
+            className="bg-gray-900 rounded border border-gray-800 hover:border-gray-700 transition-colors overflow-hidden"
           >
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1 min-w-0">
+            <div className="p-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-2 flex-wrap">
                   <h3 className="text-sm font-medium text-white">{config.name}</h3>
                   <span className={`px-2 py-0.5 rounded text-xs ${config.backup_type === 'full' ? 'bg-blue-900 text-blue-300' : 'bg-purple-900 text-purple-300'}`}>
@@ -257,8 +281,18 @@ export function BackupList() {
                   <span className={`px-2 py-0.5 rounded text-xs ${config.enabled ? 'bg-emerald-900 text-emerald-300' : 'bg-gray-800 text-gray-400'}`}>
                     {config.enabled ? 'Enabled' : 'Disabled'}
                   </span>
-                  {config.encrypt && (
-                    <span className="px-2 py-0.5 rounded text-xs bg-emerald-900/50 text-emerald-400 flex items-center gap-1">
+                  {config.mode === 'copy' && (
+                    <span className="px-2 py-0.5 rounded text-xs bg-gray-700/50 text-gray-300">
+                      Copy
+                    </span>
+                  )}
+                  {config.mode === 'compressed' && (
+                    <span className="px-2 py-0.5 rounded text-xs bg-emerald-900/50 text-emerald-400">
+                      Compressed
+                    </span>
+                  )}
+                  {config.mode === 'encrypted' && (
+                    <span className="px-2 py-0.5 rounded text-xs bg-amber-900/50 text-amber-400 flex items-center gap-1">
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
                       </svg>
@@ -331,108 +365,153 @@ export function BackupList() {
                     )}
                   </div>
                 </div>
+              </div>
 
-                {/* Backup status */}
-                {isRunning && (() => {
-                  const progress = backupProgress.get(config.id);
-                  return (
-                    <div className="mt-2 p-2 rounded bg-blue-900/30 border border-blue-800 text-blue-300 text-sm">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
-                          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          <span className="font-medium">{progress?.message || 'Starting backup...'}</span>
-                        </div>
-                        <span className="text-xs font-mono">
+              <div className="flex flex-col gap-1.5 min-w-[110px]">
+                  <button
+                    onClick={() => handleRunBackup(config.id)}
+                    disabled={isRunning}
+                    className="px-3 py-1 bg-emerald-700 hover:bg-emerald-600 disabled:bg-gray-700 disabled:cursor-not-allowed rounded text-xs font-medium transition-colors whitespace-nowrap"
+                  >
+                    {isRunning ? 'Running...' : 'Run Backup'}
+                  </button>
+                  {/* Only show Restore button for compressed or encrypted backups */}
+                  {config.mode !== 'copy' && (
+                    <button
+                      onClick={() => handleRestore(config.id)}
+                      disabled={isRunning}
+                      className="px-3 py-1 bg-blue-700 hover:bg-blue-600 disabled:bg-gray-700 disabled:cursor-not-allowed rounded text-xs transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
+                      title="Restore from backup"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                      </svg>
+                      Restore
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setEditingConfig(config)}
+                    className="px-3 py-1 text-xs text-gray-300 hover:text-white hover:bg-gray-800 rounded transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
+                    title="Configure backup settings"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 011.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.56.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.893.149c-.425.07-.765.383-.93.78-.165.398-.143.854.107 1.204l.527.738c.32.447.269 1.06-.12 1.45l-.774.773a1.125 1.125 0 01-1.449.12l-.738-.527c-.35-.25-.806-.272-1.203-.107-.397.165-.71.505-.781.929l-.149.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527c-.447.32-1.06.269-1.45-.12l-.773-.774a1.125 1.125 0 01-.12-1.45l.527-.737c.25-.35.273-.806.108-1.204-.165-.397-.505-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.107-1.204l-.527-.738a1.125 1.125 0 01.12-1.45l.773-.773a1.125 1.125 0 011.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Settings
+                  </button>
+                  <button
+                    onClick={() => handleDelete(config.id)}
+                    className="px-3 py-1 text-xs text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition-colors whitespace-nowrap"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Backup status - Outside padding to span full width */}
+            {isRunning && (() => {
+              const progress = backupProgress.get(config.id);
+              return (
+                <div className="p-3 pt-0">
+                  <div className="p-2 rounded bg-blue-900/30 border border-blue-800 text-blue-300 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <svg className="animate-spin h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span className="font-medium whitespace-nowrap">{progress?.message || 'Starting backup...'}</span>
+                        {progress?.details && (
+                          <>
+                            <span className="text-blue-400/50">•</span>
+                            <span className="text-xs font-mono opacity-75 whitespace-nowrap">{progress.details}</span>
+                          </>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-xs font-mono whitespace-nowrap">
                           {elapsedTimes.get(config.id) !== undefined
                             ? `${Math.floor(elapsedTimes.get(config.id)! / 60)}:${String(elapsedTimes.get(config.id)! % 60).padStart(2, '0')}`
                             : '0:00'}
                         </span>
+                        <button
+                          onClick={() => handleCancelBackup(config.id)}
+                          className="p-0.5 hover:bg-red-900/30 rounded transition-colors group"
+                          title="Cancel backup"
+                        >
+                          <svg className="w-3.5 h-3.5 text-blue-400 group-hover:text-red-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
                       </div>
-                      {progress?.details && (
-                        <div className="text-xs opacity-75 ml-6">{progress.details}</div>
-                      )}
                     </div>
-                  );
-                })()}
-
-                {/* Backup result */}
-                {!isRunning && result && (
-                  <div
-                    className={`mt-2 p-2 rounded text-sm ${
-                      result.success
-                        ? 'bg-emerald-900/30 border border-emerald-800 text-emerald-300'
-                        : 'bg-red-900/30 border border-red-800 text-red-300'
-                    }`}
-                  >
-                    <div className="flex items-start gap-2">
-                      {result.success ? (
-                        <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                      ) : (
-                        <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-0.5">
-                          <span className="font-medium">
-                            {result.success ? 'Backup Successful' : 'Backup Failed'}
-                          </span>
-                          {result.job && result.job.started_at && result.job.completed_at && (
-                            <span className="text-xs font-mono opacity-75">
-                              {Math.floor((result.job.completed_at - result.job.started_at) / 60)}m {(result.job.completed_at - result.job.started_at) % 60}s
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs opacity-90">{result.message}</div>
+                    {/* Thin progress bar */}
+                    {(progress?.current !== undefined && progress?.total !== undefined && progress.total > 0) ||
+                     (progress?.stage && ['compressing', 'encrypting', 'writing', 'checksum'].includes(progress.stage)) ? (
+                      <div className="mt-2 h-0.5 bg-blue-900/50 rounded-full overflow-hidden">
+                        {progress?.current !== undefined && progress?.total !== undefined && progress.total > 0 ? (
+                          // Determinate: percentage-based progress (during TAR creation)
+                          <div
+                            className="h-full bg-blue-400 transition-all duration-300 ease-out"
+                            style={{ width: `${Math.min(100, (progress.current / progress.total) * 100)}%` }}
+                          />
+                        ) : (
+                          // Indeterminate: animated striped bar (barberpole effect after TAR)
+                          <div
+                            className="h-full w-full bg-blue-400"
+                            style={{
+                              backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.3) 4px, rgba(255,255,255,0.3) 8px)',
+                              backgroundSize: '12px 12px',
+                              animation: 'barberpole 1s linear infinite'
+                            }}
+                          />
+                        )}
                       </div>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Backup result - Outside padding to span full width */}
+            {!isRunning && result && (
+              <div className="p-3 pt-0">
+                <div
+                  className={`p-2 rounded text-sm ${
+                    result.success
+                      ? 'bg-emerald-900/30 border border-emerald-800 text-emerald-300'
+                      : 'bg-red-900/30 border border-red-800 text-red-300'
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    {result.success ? (
+                      <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="font-medium">
+                          {result.success ? 'Backup Successful' : 'Backup Failed'}
+                        </span>
+                        {result.job && result.job.started_at && result.job.completed_at && (
+                          <span className="text-xs font-mono opacity-75">
+                            {Math.floor((result.job.completed_at - result.job.started_at) / 60)}m {(result.job.completed_at - result.job.started_at) % 60}s
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs opacity-90">{result.message}</div>
                     </div>
                   </div>
-                )}
+                </div>
               </div>
-
-              <div className="flex flex-col gap-1.5 min-w-[110px]">
-                <button
-                  onClick={() => handleRunBackup(config.id)}
-                  disabled={isRunning}
-                  className="px-3 py-1 bg-emerald-700 hover:bg-emerald-600 disabled:bg-gray-700 disabled:cursor-not-allowed rounded text-xs font-medium transition-colors whitespace-nowrap"
-                >
-                  {isRunning ? 'Running...' : 'Run Backup'}
-                </button>
-                <button
-                  onClick={() => handleRestore(config.id)}
-                  disabled={isRunning}
-                  className="px-3 py-1 bg-blue-700 hover:bg-blue-600 disabled:bg-gray-700 disabled:cursor-not-allowed rounded text-xs transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
-                  title="Restore from backup"
-                >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
-                  </svg>
-                  Restore
-                </button>
-                <button
-                  onClick={() => setEditingConfig(config)}
-                  className="px-3 py-1 text-xs text-gray-300 hover:text-white hover:bg-gray-800 rounded transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
-                  title="Configure backup settings"
-                >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 011.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.56.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.893.149c-.425.07-.765.383-.93.78-.165.398-.143.854.107 1.204l.527.738c.32.447.269 1.06-.12 1.45l-.774.773a1.125 1.125 0 01-1.449.12l-.738-.527c-.35-.25-.806-.272-1.203-.107-.397.165-.71.505-.781.929l-.149.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527c-.447.32-1.06.269-1.45-.12l-.773-.774a1.125 1.125 0 01-.12-1.45l.527-.737c.25-.35.273-.806.108-1.204-.165-.397-.505-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.107-1.204l-.527-.738a1.125 1.125 0 01.12-1.45l.773-.773a1.125 1.125 0 011.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  Settings
-                </button>
-                <button
-                  onClick={() => handleDelete(config.id)}
-                  className="px-3 py-1 text-xs text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition-colors whitespace-nowrap"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
+            )}
           </div>
           );
         })}

@@ -56,6 +56,7 @@ impl SchedulerState {
         let source_path = config.source_path.clone();
         let dest_path = config.destination_path.clone();
         let backup_type = config.backup_type.clone();
+        let backup_mode = config.mode.clone();
         let encryption_password = config.encryption_password.clone();
         let app_clone = app.clone();
 
@@ -65,6 +66,7 @@ impl SchedulerState {
             let source_path = source_path.clone();
             let dest_path = dest_path.clone();
             let backup_type = backup_type.clone();
+            let backup_mode = backup_mode.clone();
             let encryption_password = encryption_password.clone();
             let app = app_clone.clone();
 
@@ -88,7 +90,7 @@ impl SchedulerState {
                 let source = Path::new(&source_path);
                 let dest = Path::new(&dest_path);
 
-                match backup::compress_folder(&config_id, source, dest, &backup_type, previous_manifest.as_ref(), Some(&app), encryption_password.as_deref())
+                match backup::compress_folder(&config_id, source, dest, &backup_type, &backup_mode, previous_manifest.as_ref(), Some(&app), encryption_password.as_deref())
                 {
                     Ok(job) => {
                         log::info!("Scheduled backup completed successfully: {:?}", job);
