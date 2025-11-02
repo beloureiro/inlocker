@@ -74,6 +74,7 @@ fn test_literal_path_traversal_attack() {
         None,
         None,
         None,
+        None,
     );
 
     assert!(backup_result.is_ok(), "Backup should handle path traversal filenames");
@@ -140,6 +141,7 @@ fn test_null_byte_injection_in_filename() {
         None,
         None,
         None,
+        None,
     );
 
     assert!(backup_result.is_ok(), "Backup should complete successfully");
@@ -192,6 +194,7 @@ fn test_absolute_path_in_filename() {
         None,
         None,
         None,
+        None,
     ).unwrap();
 
     let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
@@ -241,6 +244,7 @@ fn test_symlink_escape_prevention() {
         &dest_dir,
         &BackupType::Full,
         &BackupMode::Compressed,
+        None,
         None,
         None,
         None,
@@ -317,6 +321,7 @@ fn test_decompression_bomb_protection() {
         &dest_dir,
         &BackupType::Full,
         &BackupMode::Compressed,
+        None,
         None,
         None,
         None,
@@ -415,6 +420,7 @@ fn test_disk_full_during_backup() {
         &mount_point,
         &BackupType::Full,
         &BackupMode::Compressed,
+        None,
         None,
         None,
         None,
@@ -521,6 +527,7 @@ fn test_disk_full_during_restore() {
         &dest_dir,
         &BackupType::Full,
         &BackupMode::Compressed,
+        None,
         None,
         None,
         None,
@@ -656,6 +663,7 @@ fn test_toctou_file_modification() {
         None,
         None,
         None,
+        None,
     );
 
     // Modify file DURING backup (simulated by modifying after, since backup is fast)
@@ -715,6 +723,7 @@ fn test_very_large_file_integrity() {
         &dest_dir,
         &BackupType::Full,
         &BackupMode::Compressed,
+        None,
         None,
         None,
         None,

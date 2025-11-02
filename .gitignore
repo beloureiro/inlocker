@@ -54,3 +54,4 @@ coverage/
 # User data
 config/user-config.json
 backups/
+CLAUDE.md

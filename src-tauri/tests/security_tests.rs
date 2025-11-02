@@ -34,6 +34,7 @@ fn test_detect_corrupted_backup() {
         None,
         None,
         None,
+        None,
     ).unwrap();
 
     let backup_path = std::path::PathBuf::from(backup_job.backup_path.unwrap());
@@ -104,6 +105,7 @@ fn test_large_file_integrity() {
         None,
         None,
         None,
+        None,
     ).unwrap();
 
     let backup_path = std::path::PathBuf::from(backup_job.backup_path.unwrap());
@@ -170,6 +172,7 @@ fn test_special_filenames() {
         None,
         None,
         None,
+        None,
     );
 
     assert!(backup_result.is_ok(), "Backup with special filenames failed");
@@ -231,6 +234,7 @@ fn test_deep_directory_structure() {
         None,
         None,
         None,
+        None,
     ).unwrap();
 
     let backup_path = std::path::PathBuf::from(backup_job.backup_path.unwrap());
@@ -288,6 +292,7 @@ fn test_many_small_files() {
         &dest_dir,
         &BackupType::Full,
         &BackupMode::Compressed,
+        None,
         None,
         None,
         None,

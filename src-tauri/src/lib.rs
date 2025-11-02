@@ -48,6 +48,7 @@ pub fn run() {
             commands::load_configs,
             commands::delete_config,
             commands::run_backup_now,
+            commands::cancel_backup,
             commands::register_schedule,
             commands::unregister_schedule,
             commands::check_schedule_status,
@@ -159,6 +160,7 @@ async fn run_scheduled_backup(app: &tauri::AppHandle, config_id: &str) -> Result
         previous_manifest.as_ref(),
         Some(app),
         None, // No encryption for CLI mode yet
+        None, // No cancellation support for scheduled backups
     ) {
         Ok(job) => {
             log::info!("Backup completed: {} files, {} bytes",

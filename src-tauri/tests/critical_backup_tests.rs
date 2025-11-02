@@ -66,6 +66,7 @@ fn test_incremental_backup_only_changed_files() {
         None,
         None,
         None,
+        None,
     ).unwrap();
 
     assert_eq!(full_backup.backup_type, BackupType::Full);
@@ -97,6 +98,7 @@ fn test_incremental_backup_only_changed_files() {
         &BackupType::Incremental,
         &BackupMode::Compressed,
         Some(&loaded_manifest),
+        None,
         None,
         None,
     ).unwrap();
@@ -174,6 +176,7 @@ fn test_compression_efficiency() {
         None,
         None,
         None,
+        None,
     ).unwrap();
 
     let original_size = backup_job.original_size.unwrap() as f64;
@@ -231,6 +234,7 @@ fn test_binary_files_integrity() {
         None,
         None,
         None,
+        None,
     ).unwrap();
 
     let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
@@ -278,6 +282,7 @@ fn test_empty_and_zero_byte_files() {
         None,
         None,
         None,
+        None,
     ).unwrap();
 
     let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
@@ -319,6 +324,7 @@ fn test_manifest_tracks_all_changes() {
         &dest_dir,
         &BackupType::Full,
         &BackupMode::Compressed,
+        None,
         None,
         None,
         None,
@@ -366,6 +372,7 @@ fn test_manifest_tracks_all_changes() {
         &BackupType::Incremental,
         &BackupMode::Compressed,
         Some(&prev_manifest),
+        None,
         None,
         None,
     ).unwrap();
@@ -416,6 +423,7 @@ fn test_long_filenames() {
         None,
         None,
         None,
+        None,
     ).unwrap();
 
     let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
@@ -451,6 +459,7 @@ fn test_backup_idempotency() {
         None,
         None,
         None,
+        None,
     ).unwrap();
 
     // Backup #2 (no changes)
@@ -461,6 +470,7 @@ fn test_backup_idempotency() {
         &dest_dir,
         &BackupType::Full,
         &BackupMode::Compressed,
+        None,
         None,
         None,
         None,
@@ -505,6 +515,7 @@ fn test_checksum_must_differ_for_different_content() {
         None,
         None,
         None,
+        None,
     ).unwrap();
 
     let checksum1 = backup1.checksum.clone().unwrap();
@@ -518,6 +529,7 @@ fn test_checksum_must_differ_for_different_content() {
         &dest_dir,
         &BackupType::Full,
         &BackupMode::Compressed,
+        None,
         None,
         None,
         None,
@@ -581,6 +593,7 @@ fn test_incremental_handles_deleted_files() {
         None,
         None,
         None,
+        None,
     ).unwrap();
 
     assert_eq!(full.files_count.unwrap(), 2);
@@ -608,6 +621,7 @@ fn test_incremental_handles_deleted_files() {
         &BackupType::Incremental,
         &BackupMode::Compressed,
         Some(&prev_manifest),
+        None,
         None,
         None,
     ).unwrap();
@@ -679,6 +693,7 @@ fn test_hardlink_deduplication() {
         &dest_dir,
         &BackupType::Full,
         &BackupMode::Compressed,
+        None,
         None,
         None,
         None,
@@ -775,6 +790,7 @@ fn test_copy_mode_no_compression() {
         None,
         None,
         None,
+        None,
     ).unwrap();
 
     let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
@@ -861,6 +877,7 @@ fn test_compressed_mode_with_zstd() {
         &dest_dir,
         &BackupType::Full,
         &BackupMode::Compressed,
+        None,
         None,
         None,
         None,

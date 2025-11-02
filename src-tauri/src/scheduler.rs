@@ -90,7 +90,7 @@ impl SchedulerState {
                 let source = Path::new(&source_path);
                 let dest = Path::new(&dest_path);
 
-                match backup::compress_folder(&config_id, source, dest, &backup_type, &backup_mode, previous_manifest.as_ref(), Some(&app), encryption_password.as_deref())
+                match backup::compress_folder(&config_id, source, dest, &backup_type, &backup_mode, previous_manifest.as_ref(), Some(&app), encryption_password.as_deref(), None)
                 {
                     Ok(job) => {
                         log::info!("Scheduled backup completed successfully: {:?}", job);

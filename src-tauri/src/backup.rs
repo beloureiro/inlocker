@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::SystemTime;
 use tauri::Emitter;
 
@@ -38,6 +40,7 @@ pub fn compress_folder(
     previous_manifest: Option<&BackupManifest>,
     app: Option<&tauri::AppHandle>,
     password: Option<&str>,
+    cancel_flag: Option<Arc<AtomicBool>>,
 ) -> Result<BackupJob, String> {
     // Helper to emit progress
     let emit_progress = |stage: &str, message: &str, details: Option<String>, current: Option<usize>, total: Option<usize>| {
@@ -52,6 +55,18 @@ pub fn compress_folder(
             });
         }
     };
+
+    // Helper to check if backup was cancelled
+    let check_cancelled = || -> Result<(), String> {
+        if let Some(ref flag) = cancel_flag {
+            if flag.load(Ordering::SeqCst) {
+                log::warn!("🚫 Backup cancelled by user");
+                return Err("Backup cancelled by user".to_string());
+            }
+        }
+        Ok(())
+    };
+
     log::info!("🔵 Starting {} backup", match backup_type {
         BackupType::Full => "FULL",
         BackupType::Incremental => "INCREMENTAL",
@@ -60,6 +75,7 @@ pub fn compress_folder(
     log::info!("💾 Destination: {}", dest_path.display());
 
     emit_progress("starting", "Starting backup", None, None, None);
+    check_cancelled()?;
 
     let started_at = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -99,6 +115,7 @@ pub fn compress_folder(
         Some(0),
         Some(files_count)
     );
+    check_cancelled()?;
 
     // Determine actual backup type based on reality (not just config)
     // If backing up all files, it's FULL, otherwise it's INCREMENTAL
@@ -136,26 +153,47 @@ pub fn compress_folder(
         fs::create_dir_all(&backup_path)
             .map_err(|e| format!("Failed to create copy destination: {}", e))?;
 
-        // Copy each file preserving structure
-        let mut copied_count = 0;
-        for file_path in &files_to_backup {
-            let relative_path = file_path.strip_prefix(source_path)
-                .map_err(|e| format!("Failed to get relative path: {}", e))?;
-            let dest_file = backup_path.join(relative_path);
+        // Copy each file preserving structure with cleanup on error/cancellation
+        let copy_result = (|| -> Result<usize, String> {
+            let mut copied_count = 0;
+            for file_path in &files_to_backup {
+                // Check for cancellation
+                check_cancelled()?;
 
-            // Create parent directories
-            if let Some(parent) = dest_file.parent() {
-                fs::create_dir_all(parent)
-                    .map_err(|e| format!("Failed to create directory: {}", e))?;
+                let relative_path = file_path.strip_prefix(source_path)
+                    .map_err(|e| format!("Failed to get relative path: {}", e))?;
+                let dest_file = backup_path.join(relative_path);
+
+                // Create parent directories
+                if let Some(parent) = dest_file.parent() {
+                    fs::create_dir_all(parent)
+                        .map_err(|e| format!("Failed to create directory: {}", e))?;
+                }
+
+                // Copy file
+                fs::copy(file_path, &dest_file)
+                    .map_err(|e| format!("Failed to copy file: {}", e))?;
+                copied_count += 1;
+
+                // Emit progress every 10 files
+                if copied_count % 10 == 0 {
+                    emit_progress("copying", "Copying files directly", Some(format!("{} files", copied_count)), Some(copied_count), Some(files_count));
+                }
             }
+            Ok(copied_count)
+        })();
 
-            // Copy file
-            fs::copy(file_path, &dest_file)
-                .map_err(|e| format!("Failed to copy file: {}", e))?;
-            copied_count += 1;
+        match copy_result {
+            Ok(copied_count) => {
+                log::info!("✅ Copied {} files directly to {}", copied_count, backup_path.display());
+            }
+            Err(e) => {
+                // Cleanup partial copy on error/cancellation
+                log::warn!("⚠️  Copy failed, cleaning up partial backup folder...");
+                let _ = fs::remove_dir_all(&backup_path);
+                return Err(e);
+            }
         }
-
-        log::info!("✅ Copied {} files directly to {}", copied_count, backup_path.display());
 
         // Return early - Copy mode doesn't create archive file
         let completed_at = SystemTime::now()
@@ -184,7 +222,7 @@ pub fn compress_folder(
     log::info!("📦 Creating TAR archive...");
     emit_progress("creating_tar", "Creating TAR archive", Some(format!("{} files", files_count)), Some(0), Some(files_count));
 
-    let tar_data = create_tar_archive(&files_to_backup, source_path, |current, total| {
+    let tar_data = create_tar_archive(&files_to_backup, source_path, cancel_flag.clone(), |current, total| {
         emit_progress(
             "creating_tar",
             "Creating TAR archive",
@@ -195,6 +233,7 @@ pub fn compress_folder(
     })?;
 
     log::info!("✅ TAR archive created ({:.2} MB)", tar_data.len() as f64 / 1_048_576.0);
+    check_cancelled()?;
 
     // Compress based on mode
     let (processed_data, compressed_size) = match mode {
@@ -212,6 +251,7 @@ pub fn compress_folder(
                 size as f64 / 1_048_576.0,
                 compression_ratio
             );
+            check_cancelled()?;
             (compressed, size)
         },
         BackupMode::Encrypted => {
@@ -221,6 +261,7 @@ pub fn compress_folder(
             let compressed = compress_with_zstd(&tar_data)?;
             let size = compressed.len() as u64;
             log::info!("✅ Compressed to {:.2} MB", size as f64 / 1_048_576.0);
+            check_cancelled()?;
             (compressed, size)
         }
     };
@@ -245,6 +286,7 @@ pub fn compress_folder(
         final_data.extend_from_slice(&encrypted);
 
         log::info!("✅ Backup encrypted ({:.2} MB)", final_data.len() as f64 / 1_048_576.0);
+        check_cancelled()?;
         (final_data, Some(metadata))
     } else {
         (processed_data, None)
@@ -255,6 +297,7 @@ pub fn compress_folder(
     // Write to destination
     log::info!("💾 Writing backup file: {}", backup_filename);
     emit_progress("writing", "Writing backup file", Some(format!("{:.1} MB", final_size as f64 / 1_048_576.0)), None, None);
+    check_cancelled()?;
     fs::create_dir_all(dest_path).map_err(|e| format!("Failed to create dest dir: {}", e))?;
 
     // Write with cleanup on failure
@@ -520,7 +563,12 @@ fn scan_changed_files(
 }
 
 /// Create a tar archive from file list
-fn create_tar_archive<F>(files: &[PathBuf], base_path: &Path, mut progress_callback: F) -> Result<Vec<u8>, String>
+fn create_tar_archive<F>(
+    files: &[PathBuf],
+    base_path: &Path,
+    cancel_flag: Option<Arc<AtomicBool>>,
+    mut progress_callback: F,
+) -> Result<Vec<u8>, String>
 where
     F: FnMut(usize, usize),
 {
@@ -530,6 +578,16 @@ where
         let mut tar = tar::Builder::new(&mut tar_data);
 
         for (index, file_path) in files.iter().enumerate() {
+            // Check for cancellation every 10 files
+            if index % 10 == 0 {
+                if let Some(ref flag) = cancel_flag {
+                    if flag.load(Ordering::SeqCst) {
+                        log::warn!("🚫 TAR creation cancelled by user");
+                        return Err("Backup cancelled by user".to_string());
+                    }
+                }
+            }
+
             let relative_path = file_path
                 .strip_prefix(base_path)
                 .map_err(|e| format!("Failed to get relative path: {}", e))?;

@@ -43,6 +43,7 @@ fn test_backup_restore_cycle() {
         None,
         None, // No app handle for testing
         None, // No encryption
+        None, // No cancel flag
     );
 
     assert!(backup_result.is_ok(), "Backup should succeed: {:?}", backup_result.err());

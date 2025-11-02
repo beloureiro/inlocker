@@ -2,20 +2,25 @@ use crate::backup;
 use crate::launchd;
 use crate::scheduler::SchedulerState;
 use crate::types::{BackupConfig, BackupManifest, BackupResult, BackupType};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager, State};
 
 /// Application state wrapper
 pub struct AppState {
     pub configs: Mutex<Vec<BackupConfig>>,
+    /// Cancellation flags for running backups: config_id -> cancel_flag
+    pub cancel_flags: Mutex<HashMap<String, Arc<AtomicBool>>>,
 }
 
 impl Default for AppState {
     fn default() -> Self {
         Self {
             configs: Mutex::new(Vec::new()),
+            cancel_flags: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -147,6 +152,13 @@ pub async fn run_backup_now(
     state: State<'_, AppState>,
     config_id: String,
 ) -> Result<BackupResult, String> {
+    // Create cancellation flag for this backup
+    let cancel_flag = Arc::new(AtomicBool::new(false));
+    {
+        let mut flags = state.cancel_flags.lock().map_err(|e| e.to_string())?;
+        flags.insert(config_id.clone(), Arc::clone(&cancel_flag));
+    }
+
     // Get the config
     let configs = state.configs.lock().map_err(|e| e.to_string())?;
     let config = configs
@@ -198,7 +210,8 @@ pub async fn run_backup_now(
     // TODO: Get password from config when encryption UI is implemented
     let password = config.encryption_password.as_deref();
 
-    match backup::compress_folder(
+    // Perform backup with cancellation support
+    let backup_result = backup::compress_folder(
         &config_id,
         source_path,
         dest_path,
@@ -207,7 +220,16 @@ pub async fn run_backup_now(
         previous_manifest.as_ref(),
         Some(&app),
         password,
-    ) {
+        Some(Arc::clone(&cancel_flag)),
+    );
+
+    // Clean up cancellation flag
+    {
+        let mut flags = state.cancel_flags.lock().map_err(|e| e.to_string())?;
+        flags.remove(&config_id);
+    }
+
+    match backup_result {
         Ok(mut job) => {
             job.config_id = config_id.clone();
 
@@ -384,4 +406,22 @@ pub async fn restore_backup(
     }
 
     backup::restore_backup(backup_path, restore_path, expected_checksum, password.as_deref())
+}
+
+/// Cancel a running backup
+#[tauri::command]
+pub async fn cancel_backup(
+    state: State<'_, AppState>,
+    config_id: String,
+) -> Result<bool, String> {
+    let flags = state.cancel_flags.lock().map_err(|e| e.to_string())?;
+
+    if let Some(flag) = flags.get(&config_id) {
+        flag.store(true, std::sync::atomic::Ordering::SeqCst);
+        log::info!("Cancellation requested for backup: {}", config_id);
+        Ok(true)
+    } else {
+        // No backup running with this config_id
+        Ok(false)
+    }
 }

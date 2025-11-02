@@ -90,6 +90,7 @@ fn test_1gb_backup_performance() {
         None,
         None,
         None,
+        None,
     );
 
     let backup_duration = start_backup.elapsed();
@@ -187,6 +188,7 @@ fn test_compression_ratio_text_files() {
         None,
         None,
         None,
+        None,
     ).unwrap();
 
     let compressed_size = backup_job.compressed_size.unwrap();
@@ -240,6 +242,7 @@ fn test_incremental_10x_faster() {
         None,
         None,
         None,
+        None,
     ).unwrap();
 
     let full_duration = start_full.elapsed();
@@ -271,6 +274,7 @@ fn test_incremental_10x_faster() {
         &BackupType::Incremental,
         &BackupMode::Compressed,
         Some(&manifest),
+        None,
         None,
         None,
     ).unwrap();
@@ -332,6 +336,7 @@ fn test_10000_small_files_performance() {
         &dest_dir,
         &BackupType::Full,
         &BackupMode::Compressed,
+        None,
         None,
         None,
         None,

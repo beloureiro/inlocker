@@ -154,24 +154,34 @@ export function BackupList() {
     }
   };
 
-  const handleCancelBackup = (configId: string) => {
+  const handleCancelBackup = async (configId: string) => {
     if (confirm('Are you sure you want to cancel this backup?')) {
-      setRunningBackups((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(configId);
-        return newSet;
-      });
-      setBackupProgress((prev) => {
-        const newMap = new Map(prev);
-        newMap.delete(configId);
-        return newMap;
-      });
-      setBackupResults((prev) =>
-        new Map(prev).set(configId, {
-          success: false,
-          message: 'Backup cancelled by user',
-        })
-      );
+      try {
+        // Call backend to cancel the backup
+        const cancelled = await invoke<boolean>('cancel_backup', { configId });
+
+        if (cancelled) {
+          console.log('[BackupList] Backup cancellation requested for:', configId);
+          // The backup will fail with "Backup cancelled by user" error
+          // The finally block in handleRunBackup will clean up the UI state
+        } else {
+          console.warn('[BackupList] No running backup found for:', configId);
+          // Clean up UI state anyway
+          setRunningBackups((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(configId);
+            return newSet;
+          });
+          setBackupProgress((prev) => {
+            const newMap = new Map(prev);
+            newMap.delete(configId);
+            return newMap;
+          });
+        }
+      } catch (error) {
+        console.error('[BackupList] Failed to cancel backup:', error);
+        alert(`Failed to cancel backup: ${error}`);
+      }
     }
   };
 

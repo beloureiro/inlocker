@@ -70,6 +70,7 @@ fn test_path_traversal_cannot_escape_backup() {
         None,
         None,
         None,
+        None,
     ).unwrap();
 
     let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
@@ -160,6 +161,7 @@ fn test_backup_with_concurrent_file_changes() {
         None,
         None,
         None,
+        None,
     );
 
     // Backup should complete even if files were present
@@ -208,6 +210,7 @@ fn test_extremely_deep_nesting() {
             &dest_dir,
             &BackupType::Full,
         &BackupMode::Compressed,
+            None,
             None,
             None,
             None,
@@ -303,6 +306,7 @@ fn test_extreme_file_sizes() {
         None,
         None,
         None,
+        None,
     ).unwrap();
 
     // CRITICAL: Verify backup size is reasonable (compression should work)
@@ -362,6 +366,7 @@ fn test_unreadable_files_handling() {
         None,
         None,
         None,
+        None,
     );
 
     // Backup might succeed (backing up readable files) or fail (strict mode)
@@ -403,6 +408,7 @@ fn test_detect_all_types_of_tampering() {
         &dest_dir,
         &BackupType::Full,
         &BackupMode::Compressed,
+        None,
         None,
         None,
         None,
@@ -449,7 +455,7 @@ fn test_incremental_race_condition_safety() {
     fs::write(source_dir.join("file1.txt"), b"version 1").unwrap();
 
     // Full backup
-    compress_folder("race-test", &source_dir, &dest_dir, &BackupType::Full, &BackupMode::Compressed, None, None, None).unwrap();
+    compress_folder("race-test", &source_dir, &dest_dir, &BackupType::Full, &BackupMode::Compressed, None, None, None, None).unwrap();
 
     let (all_files, _) = scan_all_files(&source_dir).unwrap();
     let manifest = build_manifest("race-test", &all_files, &source_dir).unwrap();
@@ -466,6 +472,7 @@ fn test_incremental_race_condition_safety() {
         &BackupType::Incremental,
         &BackupMode::Compressed,
         Some(&manifest),
+        None,
         None,
         None,
     ).unwrap();
@@ -495,6 +502,7 @@ fn test_restore_overwrites_existing_files() {
         &dest_dir,
         &BackupType::Full,
         &BackupMode::Compressed,
+        None,
         None,
         None,
         None,
