@@ -309,7 +309,7 @@ export function BackupList() {
                       Encrypted
                     </span>
                   )}
-                  {config.schedule && (
+                  {config.schedule?.enabled && config.schedule?.cron_expression && (
                     <span className="px-1.5 py-0.5 rounded text-xs bg-blue-900/50 text-blue-400 flex items-center" title="Scheduled">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />

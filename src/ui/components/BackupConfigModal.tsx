@@ -22,50 +22,57 @@ export function BackupConfigModal({ config, onSave, onClose }: BackupConfigModal
     config.schedule?.cron_expression || ''
   );
 
-  const handleCronChange = (value: string) => {
-    // Auto-format cron expression by adding spaces between fields
-    // Remove all existing spaces first
+  const formatCronExpression = (value: string) => {
+    // Smart auto-format cron expression (called onBlur)
     const cleanValue = value.replace(/\s+/g, '');
 
-    // Split into 5 fields intelligently
-    const parts: string[] = [];
-    let currentPart = '';
-
-    for (let i = 0; i < cleanValue.length; i++) {
-      const char = cleanValue[i];
-
-      // If it's a number, check if we should start a new field
-      if (/\d/.test(char)) {
-        // If current part is already a complete number or asterisk, start new part
-        if (currentPart && !/\d$/.test(currentPart)) {
-          parts.push(currentPart);
-          currentPart = char;
-        } else {
-          currentPart += char;
-        }
-      }
-      // If it's asterisk or other special char
-      else {
-        if (currentPart && currentPart !== '') {
-          parts.push(currentPart);
-          currentPart = char;
-        } else {
-          currentPart += char;
-        }
-      }
-
-      // Limit to 5 fields
-      if (parts.length >= 5) break;
+    if (!cleanValue) {
+      return '';
     }
 
-    // Add the last part
-    if (currentPart && parts.length < 5) {
-      parts.push(currentPart);
+    // Check if it's purely numeric (like "2005" or "014")
+    const isNumericOnly = /^[0-9]+$/.test(cleanValue);
+
+    if (isNumericOnly && cleanValue.length >= 2) {
+      // Parse following CRON order (as shown in the tree):
+      // minute hour day month weekday
+      const parts: string[] = [];
+      let remaining = cleanValue;
+
+      // Extract MINUTE (0-59, max 2 digits)
+      let minute = '';
+      if (remaining.length >= 2 && parseInt(remaining.substring(0, 2)) <= 59) {
+        minute = remaining.substring(0, 2);
+        remaining = remaining.substring(2);
+      } else if (remaining.length >= 1) {
+        // Single digit minute
+        minute = remaining[0];
+        remaining = remaining.substring(1);
+      }
+
+      // Extract HOUR (0-23, max 2 digits)
+      let hour = '';
+      if (remaining.length >= 2 && parseInt(remaining.substring(0, 2)) <= 23) {
+        hour = remaining.substring(0, 2);
+        remaining = remaining.substring(2);
+      } else if (remaining.length >= 1 && parseInt(remaining[0]) <= 23) {
+        // Single digit hour
+        hour = remaining[0];
+        remaining = remaining.substring(1);
+      }
+
+      // If we got at least minute and hour, create valid cron
+      if (minute && hour) {
+        parts.push(minute, hour, '*', '*', '*');
+        return parts.join(' ');
+      }
+
+      // If only minute provided, keep original
+      return value;
     }
 
-    // Join with spaces
-    const formatted = parts.join(' ');
-    setCustomCron(formatted);
+    // For non-numeric, return as-is
+    return value;
   };
 
   const schedulePresets = [
@@ -95,7 +102,16 @@ export function BackupConfigModal({ config, onSave, onClose }: BackupConfigModal
     }
 
     const selectedPreset = schedulePresets.find((p) => p.value === schedulePreset);
-    const cronExpression = schedulePreset === 'custom' ? customCron : selectedPreset?.cron || '';
+    let cronExpression = schedulePreset === 'custom' ? customCron : selectedPreset?.cron || '';
+
+    // Auto-fill custom cron with asterisks to ensure 5 fields
+    if (schedulePreset === 'custom' && cronExpression) {
+      const parts = cronExpression.trim().split(/\s+/);
+      while (parts.length < 5) {
+        parts.push('*');
+      }
+      cronExpression = parts.slice(0, 5).join(' ');
+    }
 
     const scheduleConfig: ScheduleConfig | null =
       schedulePreset === 'none'
@@ -303,8 +319,9 @@ export function BackupConfigModal({ config, onSave, onClose }: BackupConfigModal
               <input
                 type="text"
                 value={customCron}
-                onChange={(e) => handleCronChange(e.target.value)}
-                placeholder="Type: 014*** or 0 14 * * *"
+                onChange={(e) => setCustomCron(e.target.value)}
+                onBlur={(e) => setCustomCron(formatCronExpression(e.target.value))}
+                placeholder="Type: 0014 (min=00, hour=14) or 0 14 * * *"
                 className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 placeholder-gray-500 focus:border-emerald-600 focus:outline-none transition-colors"
               />
               <div className="mt-2 p-2.5 bg-gray-900/50 border border-gray-700 rounded text-xs space-y-1.5">
