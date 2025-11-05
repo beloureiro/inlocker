@@ -2,20 +2,45 @@
 
 Welcome to the InLocker documentation! This is an automatic, compressed, and secure backup app for macOS.
 
-## Quick Navigation
+## 📁 Documentation Structure
 
-### 🚀 For Users
-- **[User Guide](07-user-guide.md)** - How to use InLocker (5 min read)
+```
+docs/
+├── README.md                              # This file - navigation guide
+├── 01-planning/                           # Project planning and architecture
+│   ├── 01-value-proposition.md            # Problem, solution, competitive advantage
+│   ├── 02-architecture.md                 # System design and data flow
+│   └── 03-tech-stack.md                   # Technologies and justifications
+├── 02-development/                        # Development resources
+│   ├── 01-roadmap.md                      # Implementation phases (with progress)
+│   ├── 02-quickstart.md                   # Setup instructions for developers
+│   ├── 03-dev-guide.md                    # Daily commands and debugging
+│   └── 04-testing-strategy.md             # Testing approach and test suites
+└── 03-systems/                            # User and system guides
+    ├── 01-user-guide.md                   # End-user instructions
+    └── 02-inlog-system-guide.md           # InLog automatic changelog system
+```
 
-### 👨‍💻 For Developers
-- **[Quick Start](05-quickstart.md)** - Get up and running fast (10 min)
-- **[Developer Guide](06-dev-guide.md)** - Daily commands and debugging (reference)
+---
 
-### 📚 For Understanding the Project
+## 🚀 Quick Navigation
+
+### For Users
+- **[User Guide](03-systems/01-user-guide.md)** - How to use InLocker (5 min read)
+
+### For Developers
+- **[Quick Start](02-development/02-quickstart.md)** - Get up and running fast (10 min)
+- **[Developer Guide](02-development/03-dev-guide.md)** - Daily commands and debugging (reference)
+
+### For Understanding the Project
 
 Read the core documentation in this recommended order:
 
-#### 1. [Value Proposition](01-value-proposition.md)
+---
+
+## 📚 01 - Planning
+
+### [01 - Value Proposition](01-planning/01-value-proposition.md)
 **Read first to understand:**
 - What problem we're solving
 - Who it's for
@@ -26,7 +51,7 @@ Read the core documentation in this recommended order:
 
 ---
 
-#### 2. [Architecture](02-architecture.md)
+### [02 - Architecture](01-planning/02-architecture.md)
 **Read to understand:**
 - How the system works internally
 - Data flow (input → processing → output)
@@ -37,7 +62,7 @@ Read the core documentation in this recommended order:
 
 ---
 
-#### 3. [Tech Stack](03-tech-stack.md)
+### [03 - Tech Stack](01-planning/03-tech-stack.md)
 **Read to understand:**
 - Technologies used (Tauri, React, Rust)
 - Why we chose each tool
@@ -49,9 +74,11 @@ Read the core documentation in this recommended order:
 
 ---
 
-#### 4. [Roadmap](04-roadmap.md)
+## 💻 02 - Development
+
+### [01 - Roadmap](02-development/01-roadmap.md)
 **Read to understand:**
-- Implementation phases and progress (95% complete!)
+- Implementation phases and progress (99% complete!)
 - Task checklists with completion status
 - Risks and mitigations
 - MVP status and next steps
@@ -60,22 +87,78 @@ Read the core documentation in this recommended order:
 
 ---
 
-## Getting Started
+### [02 - Quick Start](02-development/02-quickstart.md)
+**Read to get started:**
+- Environment setup
+- Installation steps
+- First run instructions
 
-### New to InLocker Development?
-
-1. **Start here:** [Quick Start Guide](05-quickstart.md) - Set up your environment
-2. **Then read:** [Tech Stack](03-tech-stack.md) - Understand the technologies
-3. **Check progress:** [Roadmap](04-roadmap.md) - See what's done and what's next
-4. **Daily work:** [Developer Guide](06-dev-guide.md) - Commands and troubleshooting
-
-### Just Want to Use InLocker?
-
-Go straight to the **[User Guide](07-user-guide.md)** for step-by-step instructions
+**Estimated time:** 10 minutes
 
 ---
 
-## overview
+### [03 - Developer Guide](02-development/03-dev-guide.md)
+**Daily reference for:**
+- Common commands
+- Debugging tips
+- Development workflow
+- Troubleshooting
+
+**Estimated time:** Reference (5 min to skim)
+
+---
+
+### [04 - Testing Strategy](02-development/04-testing-strategy.md)
+**Read to understand:**
+- Test architecture
+- Test coverage goals
+- How to run tests
+- Test implementation examples
+
+**Estimated time:** 8 minutes
+
+---
+
+## 📖 03 - Systems
+
+### [01 - User Guide](03-systems/01-user-guide.md)
+**End-user instructions:**
+- Installing InLocker
+- Creating backups
+- Scheduling automatic backups
+- Restoring files
+
+**Estimated time:** 10 minutes
+
+---
+
+### [02 - InLog System Guide](03-systems/02-inlog-system-guide.md)
+**Complete guide for:**
+- InLog automatic changelog system
+- Git hooks setup
+- Conventional commits
+- Customization options
+
+**Estimated time:** 15-20 minutes
+
+---
+
+## 🎯 Getting Started
+
+### New to InLocker Development?
+
+1. **Start here:** [Quick Start Guide](02-development/02-quickstart.md) - Set up your environment
+2. **Then read:** [Tech Stack](01-planning/03-tech-stack.md) - Understand the technologies
+3. **Check progress:** [Roadmap](02-development/01-roadmap.md) - See what's done and what's next
+4. **Daily work:** [Developer Guide](02-development/03-dev-guide.md) - Commands and troubleshooting
+
+### Just Want to Use InLocker?
+
+Go straight to the **[User Guide](03-systems/01-user-guide.md)** for step-by-step instructions
+
+---
+
+## 📊 Project Overview
 
 ```
 InLocker is an app that:
@@ -90,7 +173,7 @@ INPUT               PROCESS                  OUTPUT
 
 ---
 
-## Key Features
+## ✨ Key Features
 
 ### Compression
 - **Algorithm:** zstd (Zstandard)
@@ -117,7 +200,7 @@ INPUT               PROCESS                  OUTPUT
 
 ---
 
-## Technologies
+## 🛠️ Technologies
 
 Built with modern, production-ready tools:
 
@@ -128,12 +211,13 @@ Built with modern, production-ready tools:
 - **Styling:** TailwindCSS 3.4
 - **Build:** Vite 7.1.12 (ultra-fast dev experience)
 - **Package Manager:** pnpm 10.19.0
+- **Git Hooks:** Husky 9.1.7 + InLog system
 
-See [Tech Stack](03-tech-stack.md) for detailed justifications.
+See [Tech Stack](01-planning/03-tech-stack.md) for detailed justifications.
 
 ---
 
-## Useful Links
+## 🔗 Useful Links
 
 - **Repository:** [github.com/beloureiro/inlocker](https://github.com/beloureiro/inlocker)
 - **Issues:** [GitHub Issues](https://github.com/beloureiro/inlocker/issues)
@@ -142,7 +226,7 @@ See [Tech Stack](03-tech-stack.md) for detailed justifications.
 
 ---
 
-## conventions
+## 📝 Conventions
 
 Throughout the documentation:
 
@@ -155,49 +239,37 @@ Throughout the documentation:
 
 ---
 
-## Project Status
+## 📈 Project Status
 
-**Current Phase:** Phase 3 - Automation and Security ✅ (95% Complete!)
+**Current Phase:** Phase 4 - Polish and Delivery 🚀 (99% Complete!)
 
 **What's Working:**
 - ✅ Full and incremental backups with zstd compression
 - ✅ Real-time backup progress UI with live updates
 - ✅ Automatic scheduling via macOS launchd (works with app closed!)
 - ✅ Native macOS notifications (start/success/error)
-- ✅ Backup restore functionality
+- ✅ Backup restore functionality with integrity verification
+- ✅ AES-256-GCM encryption (optional)
 - ✅ Size tracking and compression ratio display
+- ✅ Backup cancellation support
+- ✅ InLog automatic changelog system
+- ✅ 78 automated tests (all passing)
 
 **Next Steps:**
-- ⏳ Optional AES-256 encryption
-- ⏳ Dashboard with metrics and history
-- ⏳ Integrity verification (SHA-256 checksum validation)
+- ⏳ Performance tests
+- ⏳ Manual validation
+- ⏳ Dashboard with metrics (nice-to-have)
 
 ---
 
-## Documentation Structure
-
-```
-docs/
-├── readme.md                    # This file - navigation guide
-├── 01-value-proposition.md      # Problem, solution, competitive advantage
-├── 02-architecture.md           # System design and data flow
-├── 03-tech-stack.md             # Technologies and justifications
-├── 04-roadmap.md                # Implementation phases (with progress)
-├── 05-quickstart.md             # Setup instructions for developers
-├── 06-dev-guide.md              # Daily commands and debugging
-└── 07-user-guide.md             # End-user instructions
-```
-
----
-
-## Updates
+## 🔄 Updates
 
 This documentation is alive and will be updated as the project evolves.
 
-**Last update:** 2025-11-01
-**Documentation version:** 3.0.0
-**Project status:** MVP near completion (95%)
+**Last update:** 2025-11-05
+**Documentation version:** 4.0.0
+**Project status:** MVP near completion (99%)
 
 ---
 
-**happy reading and happy developing!**
+**Happy reading and happy developing! 🚀**

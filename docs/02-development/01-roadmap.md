@@ -414,24 +414,36 @@ See detailed testing strategy in `docs/08-testing-strategy.md`
 - ✅ **UI polish**: COMPLETE - Full-width progress bar, inline status layout
 - ✅ **Cancel button UI**: COMPLETE - Frontend button integrated with backend
 - ✅ **Backend cancellation**: COMPLETE - Full cancellation support with cleanup (Arc<AtomicBool>, 46 test calls updated)
+- ✅ **Schedule UI bugs**: FIXED - Clock icon badge removal, cron parser follows tree order, improved typing UX
+- [ ] **Cancellation in production**: Fix cancel checks during compression/encryption (works in dev, fails in release mode)
+- [ ] **CLI encryption support**: Add password support to scheduled backups (launchd mode)
+- [ ] **Lock optimization**: Replace Mutex with RwLock in AppState for concurrent reads
+- [ ] **Launchd logging**: Move logs from /tmp to persistent location for easier debugging
+- ✅ **Restore button not working**: FIXED - list_backups() now includes .tar.zst.enc files (backup.rs:918), added password prompt in UI (BackupList.tsx:215-225)
+- ✅ **Parallel backups UI**: FIXED - Added debounced loadConfigs() to prevent re-render issues, moved config reload to finally block (BackupList.tsx:29-36, 166)
+- ✅ **InLog system**: COMPLETE - Automatic changelog generation with git hooks (scripts/git/update-changelog.mjs, .husky/post-commit, CHANGELOG.md)
 - ⏳ **Performance tests**: PENDING (4 tests implemented, optional long-duration tests available)
 - ⏳ **Dashboard**: PENDING (nice-to-have)
 
 **CRITICAL PATH:** 🎯 Performance tests → Manual validation → MVP LAUNCH ✨
 
 **NEXT STEPS (Priority Order):**
-1. **Performance tests** - Complete remaining tests (2h)
-2. **Manual validation** - End-to-end testing (1-2h)
-3. **Dashboard** (optional) - Basic metrics display (nice-to-have)
+1. **Fix cancellation in production** - Add cancel checks during compression/encryption (backup.rs) (2-3h)
+2. **Add CLI encryption support** - Enable password in scheduled backups (lib.rs:162) (30min)
+3. **Optimize locks** - Use RwLock for concurrent backup reads (commands.rs) (1h)
+4. **Improve launchd logging** - Persistent logs location (launchd.rs) (30min)
+5. **Performance tests** - Complete remaining tests (2h)
+6. **Manual validation** - End-to-end testing (1-2h)
+7. **Dashboard** (optional) - Basic metrics display (nice-to-have)
 
 **MVP STATUS:** 🎯 **99.5% COMPLETE** - Production-ready core! 🚀
 - ✅ Backup (Full + Incremental with live progress)
 - ✅ Scheduling (Independent via launchd)
-- ✅ Restore (with backup selection + integrity verification)
+- ✅ **Restore** (works for compressed and encrypted backups, 4 tests passing)
 - ✅ Notifications (start/success/error)
 - ✅ Encryption (full UI + backend integration)
 - ✅ Real-time progress (determinate + indeterminate with barberpole)
-- ✅ **Backup cancellation** (fully functional with cleanup)
+- ⚠️ **Backup cancellation** (UI works, needs fix for compression/encryption stages in production)
 - ✅ 78 automated tests (all passing, 75% coverage)
 - ✅ **All critical security bugs fixed**
 - ⏳ Performance tests (4 tests - basic performance validated, extended stress tests available)
@@ -474,4 +486,4 @@ Total:                               77 tests
 
 ---
 
-**Last Updated**: 2025-11-02 (Backend cancellation COMPLETE: Arc<AtomicBool> mechanism, cleanup on cancel, 46 test calls updated, fully tested)
+**Last Updated**: 2025-11-05 (FIXED: restore button works for encrypted backups + parallel backups UI now properly displays multiple running backups; ADDED: InLog automatic changelog system with git hooks; TODO: cancellation fails in production during compression/encryption stages; CLI mode needs encryption support; locks optimization needed for concurrent backups)
