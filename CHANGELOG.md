@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2025-11-05
+
+### Features
+
+- **changelog:** implement InLog automatic changelog system
+
+  - Install and configure Husky 9.1.7 for git hooks
+  - Create update-changelog.mjs script with semantic versioning
+  - Add post-commit hook for automatic CHANGELOG updates
+  - Support conventional commits (feat, fix, docs, chore)
+  - Auto-increment version in package.json (MAJOR.MINOR.PATCH)
+  - Generate CHANGELOG.md entries automatically
+  - Prevent infinite loops with .changelog-lock flag file
+  - Add comprehensive InLog system guide documentation
+  - Populate CHANGELOG.md with complete git history
+
 ## [0.1.1] - 2025-11-05
 
 ### Bug Fixes

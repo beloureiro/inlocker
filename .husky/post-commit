@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+
+# InLog - Changelog System by Inmotion
+# Automatically updates CHANGELOG.md and package.json version after commit
+node scripts/git/update-changelog.mjs
