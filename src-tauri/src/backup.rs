@@ -912,10 +912,10 @@ pub fn list_backups(destination_path: &Path) -> Result<Vec<BackupInfo>, String> 
         let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
         let path = entry.path();
 
-        // Only include .tar.zst files
+        // Include .tar.zst and .tar.zst.enc files (compressed and encrypted backups)
         if let Some(filename) = path.file_name() {
             let filename_str = filename.to_string_lossy();
-            if filename_str.ends_with(".tar.zst") {
+            if filename_str.ends_with(".tar.zst") || filename_str.ends_with(".tar.zst.enc") {
                 if let Ok(metadata) = fs::metadata(&path) {
                     let created_at = metadata
                         .modified()

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useBackupStore, BackupConfig } from '../../store/useBackupStore';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -22,6 +22,19 @@ export function BackupList() {
   const [elapsedTimes, setElapsedTimes] = useState<Map<string, number>>(new Map());
   const [backupProgress, setBackupProgress] = useState<Map<string, BackupProgress>>(new Map());
 
+  // Debounce loadConfigs to avoid multiple re-renders during parallel backups
+  const loadConfigsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Helper: Debounced loadConfigs to prevent multiple re-renders when backups complete
+  const debouncedLoadConfigs = () => {
+    if (loadConfigsTimeoutRef.current) {
+      clearTimeout(loadConfigsTimeoutRef.current);
+    }
+    loadConfigsTimeoutRef.current = setTimeout(() => {
+      loadConfigs();
+    }, 500); // Wait 500ms after last backup completes
+  };
+
   // Listen to backup progress events
   useEffect(() => {
     const unlisten = listen<BackupProgress>('backup:progress', (event) => {
@@ -31,6 +44,10 @@ export function BackupList() {
 
     return () => {
       unlisten.then(fn => fn());
+      // Clean up debounce timeout on unmount
+      if (loadConfigsTimeoutRef.current) {
+        clearTimeout(loadConfigsTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -110,17 +127,12 @@ export function BackupList() {
       console.log('[BackupList] Calling run_backup_now...');
       const result = await invoke('run_backup_now', { configId });
       console.log('[BackupList] Backup result:', result);
-      console.log('[BackupList] Result type:', typeof result);
-      console.log('[BackupList] Result keys:', Object.keys(result as any));
 
       setBackupResults((prev) => {
         const newMap = new Map(prev).set(configId, result);
         console.log('[BackupList] Updated backupResults, size:', newMap.size);
-        console.log('[BackupList] Result for config:', newMap.get(configId));
         return newMap;
       });
-
-      await loadConfigs(); // Reload to get updated last_backup_at
 
       // Show success alert
       if ((result as any).success) {
@@ -140,9 +152,11 @@ export function BackupList() {
       // Show error alert
       alert(`Backup failed:\n${errorMessage}`);
     } finally {
+      // Clean up UI state for this backup
       setRunningBackups((prev) => {
         const newSet = new Set(prev);
         newSet.delete(configId);
+        console.log('[BackupList] Removed from running backups. Remaining:', newSet.size);
         return newSet;
       });
       setBackupProgress((prev) => {
@@ -150,7 +164,12 @@ export function BackupList() {
         newMap.delete(configId);
         return newMap;
       });
-      console.log('[BackupList] Backup process finished');
+
+      // Reload configs with debounce to avoid multiple re-renders during parallel backups
+      // This updates last_backup_at timestamp in the UI
+      debouncedLoadConfigs();
+
+      console.log('[BackupList] Backup process finished for:', configId);
     }
   };
 
@@ -212,6 +231,18 @@ export function BackupList() {
 
       const selectedBackup = backups[index];
 
+      // Check if backup is encrypted (needs password)
+      const isEncrypted = selectedBackup.filename.endsWith('.enc');
+      let password: string | null = null;
+
+      if (isEncrypted) {
+        password = prompt('This backup is encrypted.\n\nPlease enter the password used during backup:');
+        if (!password) {
+          alert('Password is required to restore encrypted backups');
+          return;
+        }
+      }
+
       // Ask for restore destination
       const destination = await invoke<string | null>('select_folder');
       if (!destination) return;
@@ -232,6 +263,7 @@ export function BackupList() {
         backupFilePath: selectedBackup.path,
         restoreDestination: destination,
         expectedChecksum,
+        password,
       });
 
       setBackupResults((prev) =>
