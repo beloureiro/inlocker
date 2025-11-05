@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2025-11-05
+
+### Bug Fixes
+
+- **ui:** prevent config reload from hiding parallel backup progress
+
+  - Replace debouncedLoadConfigs with smartLoadConfigs
+  - Only reload configs when NO backups are running (size === 0)
+  - Prevents re-renders from affecting running backups UI state
+  - Fixes issue where second backup completion hides first backup progress
+  - Defers config reload until all parallel backups complete
+
 ## [0.2.0] - 2025-11-05
 
 ### Features

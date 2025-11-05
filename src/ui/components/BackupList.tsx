@@ -25,14 +25,22 @@ export function BackupList() {
   // Debounce loadConfigs to avoid multiple re-renders during parallel backups
   const loadConfigsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Helper: Debounced loadConfigs to prevent multiple re-renders when backups complete
-  const debouncedLoadConfigs = () => {
+  // Helper: Only reload configs when NO backups are running
+  // This prevents re-renders from affecting running backups UI state
+  const smartLoadConfigs = (currentRunningBackups: Set<string>) => {
     if (loadConfigsTimeoutRef.current) {
       clearTimeout(loadConfigsTimeoutRef.current);
     }
-    loadConfigsTimeoutRef.current = setTimeout(() => {
-      loadConfigs();
-    }, 500); // Wait 500ms after last backup completes
+
+    // Only reload if no backups are currently running
+    if (currentRunningBackups.size === 0) {
+      loadConfigsTimeoutRef.current = setTimeout(() => {
+        console.log('[BackupList] No running backups, safe to reload configs');
+        loadConfigs();
+      }, 300);
+    } else {
+      console.log('[BackupList] Backups still running, deferring config reload');
+    }
   };
 
   // Listen to backup progress events
@@ -157,6 +165,11 @@ export function BackupList() {
         const newSet = new Set(prev);
         newSet.delete(configId);
         console.log('[BackupList] Removed from running backups. Remaining:', newSet.size);
+
+        // Smart reload: only reload configs if no other backups are running
+        // This prevents re-renders from hiding the UI state of parallel backups
+        smartLoadConfigs(newSet);
+
         return newSet;
       });
       setBackupProgress((prev) => {
@@ -164,10 +177,6 @@ export function BackupList() {
         newMap.delete(configId);
         return newMap;
       });
-
-      // Reload configs with debounce to avoid multiple re-renders during parallel backups
-      // This updates last_backup_at timestamp in the UI
-      debouncedLoadConfigs();
 
       console.log('[BackupList] Backup process finished for:', configId);
     }
