@@ -65,15 +65,16 @@ InLocker creates different outputs depending on your chosen mode:
 
 ## current status
 
-**MVP Progress:** 🎯 **98% COMPLETE** - Production-ready core!
+**MVP Progress:** 🎯 **99% COMPLETE** - Production-ready core!
 
 ### ✅ completed features
 - ✅ **3 Backup Modes** - Copy, Compressed, or Encrypted (user choice)
 - ✅ **Backup Core** - Full + Incremental with mode selection
+- ✅ **Parallel Backups** - Execute multiple backups simultaneously with confirmation dialog
 - ✅ **Scheduling** - macOS launchd integration (works with app closed)
-- ✅ **Restore** - Point-in-time restore with integrity verification
+- ✅ **Restore** - Dedicated RestoreSelector with real-time progress, cancellation support, and spinner feedback
 - ✅ **Encryption** - AES-256-GCM with password UI (31 tests passing)
-- ✅ **Real-time UI** - Live progress feedback during backups
+- ✅ **Real-time UI** - Live progress feedback with stage indicators during backups and restore
 - ✅ **Notifications** - Native macOS alerts for backup events
 - ✅ **Security** - All critical bugs fixed, timing attacks prevented
 - ✅ **Performance** - 52x incremental speedup, 5841x compression ratio
@@ -88,30 +89,30 @@ InLocker creates different outputs depending on your chosen mode:
 
 Complete documentation is organized in `/docs`:
 
-1. **[quickstart guide](docs/05-quickstart.md)** 🚀
+1. **[quickstart guide](docs/05-quickstart/README.md)** 🚀
    - Setup in 5 minutes
    - First backup tutorial
 
-2. **[user guide](docs/07-user-guide.md)** 👤
-   - How to use InLocker
-   - Creating backups
-   - Managing schedules
-   - Troubleshooting
-
-3. **[developer guide](docs/06-dev-guide.md)** 👨‍💻
+2. **[developer guide](docs/02-development/03-dev-guide.md)** 👨‍💻
+   - Development commands
    - Architecture overview
    - Building from source
-   - Contributing guidelines
+   - Troubleshooting
 
-4. **[testing strategy](docs/08-testing-strategy.md)** 🧪
-   - 73 tests breakdown
-   - Security test coverage
-   - Quality metrics
-
-5. **[roadmap](docs/04-roadmap.md)** 📋
-   - Implementation progress
+3. **[roadmap](docs/02-development/01-roadmap.md)** 📋
+   - Implementation progress (99% complete)
+   - Testing strategy (78 tests)
    - Next steps
-   - Future enhancements
+
+4. **[value proposition](docs/01-planning/01-value-proposition.md)** 💡
+   - Why InLocker?
+   - Battle-tested quality
+   - Competitive advantages
+
+5. **[changelog](CHANGELOG.md)** 📝
+   - Version history
+   - Recent updates
+   - Automated with InLog system
 
 ---
 
@@ -124,7 +125,7 @@ Complete documentation is organized in `/docs`:
 - lucide-react (icons)
 
 **backend:**
-- Tauri 2.9.2 (framework)
+- Tauri 2.9.3 (framework)
 - Rust 1.91.0 (core)
 - zstd 0.13 (compression)
 - ring 0.17 (AES-256-GCM)
@@ -133,7 +134,7 @@ Complete documentation is organized in `/docs`:
 **build tools:**
 - Node.js 23.11.1
 - pnpm 10.19.0
-- Vite 7.1.12
+- Vite 7.2.0
 
 ---
 
@@ -212,14 +213,15 @@ cd src-tauri && cargo test --all
 
 ## roadmap
 
-### ✅ MVP features (98% complete)
+### ✅ MVP features (99% complete)
 - ✅ Folder selection and configuration management
 - ✅ Manual and automatic backup (launchd)
 - ✅ Full + Incremental backup types
 - ✅ 3 Backup modes (Copy, Compressed, Encrypted)
+- ✅ Parallel backups execution
 - ✅ Optional encryption with password UI
-- ✅ Point-in-time restore with integrity verification
-- ✅ Real-time progress UI
+- ✅ Point-in-time restore with real-time progress and cancellation
+- ✅ Real-time progress UI with stage indicators
 - ⏳ Dashboard with metrics (optional)
 
 ### future enhancements (post-MVP)
@@ -244,7 +246,7 @@ InLocker takes security seriously:
 - **Hardened:** Protection against path traversal, timing attacks, tampering
 - **No Network:** All data stays local, no telemetry or cloud sync
 
-See [docs/08-testing-strategy.md](docs/08-testing-strategy.md) for security test coverage.
+See [roadmap](docs/02-development/01-roadmap.md) for complete testing strategy and security test coverage.
 
 ---
 
