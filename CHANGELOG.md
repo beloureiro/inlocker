@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2025-11-06
+
+### Bug Fixes
+
+- **build:** resolve DMG bundling failure on macOS
+
+  - Change bundle identifier from com.inlocker.app to com.inlocker.backup
+  - (fixes conflict with .app extension warning)
+  - Update bundle targets from 'all' string to ['app', 'dmg'] array
+  - (resolves intermittent bundle_dmg.sh failures)
+  - Add macOS minimumSystemVersion configuration (10.13)
+  - Ensures consistent and automatic DMG generation without errors
+
 ## [0.5.0] - 2025-11-06
 
 ### Features
