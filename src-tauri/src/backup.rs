@@ -218,94 +218,150 @@ pub fn compress_folder(
         });
     }
 
-    // For Compressed and Encrypted modes: Create TAR archive
-    log::info!("📦 Creating TAR archive...");
+    // For Compressed and Encrypted modes: Create TAR archive with streaming compression
+    log::info!("📦 Creating TAR archive with streaming compression...");
     emit_progress("creating_tar", "Creating TAR archive", Some(format!("{} files", files_count)), Some(0), Some(files_count));
 
-    let tar_data = create_tar_archive(&files_to_backup, source_path, cancel_flag.clone(), |current, total| {
-        emit_progress(
-            "creating_tar",
-            "Creating TAR archive",
-            Some(format!("{} files", current)),
-            Some(current),
-            Some(total)
+    // Ensure destination directory exists
+    fs::create_dir_all(dest_path).map_err(|e| format!("Failed to create dest dir: {}", e))?;
+
+    // For Compressed mode: Write TAR directly to streaming zstd encoder
+    let compressed_size = if mode == &BackupMode::Compressed {
+        log::info!("🗜️  Streaming TAR + zstd compression (level 3)...");
+        emit_progress("compressing", "Compressing with zstd", Some(format!("{} files", files_count)), Some(0), Some(files_count));
+
+        // Create streaming encoder that writes directly to file
+        let output_file = fs::File::create(&backup_path)
+            .map_err(|e| {
+                let _ = fs::remove_file(&backup_path);
+                format!("Failed to create backup file: {}", e)
+            })?;
+
+        let result = create_tar_with_streaming_compression(
+            &files_to_backup,
+            source_path,
+            output_file,
+            3, // zstd level
+            cancel_flag.clone(),
+            |current, total| {
+                emit_progress(
+                    "compressing",
+                    "Streaming TAR + zstd",
+                    Some(format!("{} files", current)),
+                    Some(current),
+                    Some(total)
+                );
+            }
         );
-    })?;
 
-    log::info!("✅ TAR archive created ({:.2} MB)", tar_data.len() as f64 / 1_048_576.0);
-    check_cancelled()?;
-
-    // Compress based on mode
-    let (processed_data, compressed_size) = match mode {
-        BackupMode::Copy => {
-            unreachable!("Copy mode handled above")
-        },
-        BackupMode::Compressed => {
-            // Compressed mode: use zstd compression
-            log::info!("🗜️  Compressing with zstd (level 3)...");
-            emit_progress("compressing", "Compressing with zstd", Some(format!("{:.1} MB", tar_data.len() as f64 / 1_048_576.0)), None, None);
-            let compressed = compress_with_zstd(&tar_data)?;
-            let size = compressed.len() as u64;
-            let compression_ratio = (1.0 - (size as f64 / total_size.max(1) as f64)) * 100.0;
-            log::info!("✅ Compressed to {:.2} MB ({:.1}% compression)",
-                size as f64 / 1_048_576.0,
-                compression_ratio
-            );
-            check_cancelled()?;
-            (compressed, size)
-        },
-        BackupMode::Encrypted => {
-            // Encrypted mode: compress first, then encrypt
-            log::info!("🗜️  Compressing with zstd (level 3)...");
-            emit_progress("compressing", "Compressing with zstd", Some(format!("{:.1} MB", tar_data.len() as f64 / 1_048_576.0)), None, None);
-            let compressed = compress_with_zstd(&tar_data)?;
-            let size = compressed.len() as u64;
-            log::info!("✅ Compressed to {:.2} MB", size as f64 / 1_048_576.0);
-            check_cancelled()?;
-            (compressed, size)
+        match result {
+            Ok(size) => {
+                let compression_ratio = (1.0 - (size as f64 / total_size.max(1) as f64)) * 100.0;
+                log::info!("✅ Compressed to {:.2} MB ({:.1}% compression)",
+                    size as f64 / 1_048_576.0,
+                    compression_ratio
+                );
+                size
+            }
+            Err(e) => {
+                // CRITICAL: Clean up partial file on error
+                let _ = fs::remove_file(&backup_path);
+                return Err(e);
+            }
         }
-    };
+    } else {
+        // Encrypted mode: Use streaming TAR + zstd + encryption
+        log::info!("🗜️  Streaming TAR + zstd + encryption...");
+        emit_progress("compressing", "Compressing and encrypting", Some(format!("{} files", files_count)), Some(0), Some(files_count));
 
-    // Encrypt if password provided (Encrypted mode only)
-    let (final_data, _encryption_metadata) = if mode == &BackupMode::Encrypted && password.is_some() {
-        let pwd = password.unwrap();
+        let pwd = password.ok_or("Encryption enabled but no password provided")?;
+
+        // Create temporary file for compressed data (before encryption)
+        let temp_compressed = backup_path.with_extension("tmp.zst");
+
+        // Step 1: Stream TAR + zstd to temp file
+        let temp_file = fs::File::create(&temp_compressed)
+            .map_err(|e| {
+                let _ = fs::remove_file(&temp_compressed);
+                format!("Failed to create temp file: {}", e)
+            })?;
+
+        let compressed_size_result = create_tar_with_streaming_compression(
+            &files_to_backup,
+            source_path,
+            temp_file,
+            3, // zstd level
+            cancel_flag.clone(),
+            |current, total| {
+                emit_progress(
+                    "compressing",
+                    "Streaming TAR + zstd",
+                    Some(format!("{} files", current)),
+                    Some(current),
+                    Some(total)
+                );
+            }
+        );
+
+        let compressed_size = match compressed_size_result {
+            Ok(size) => {
+                log::info!("✅ Compressed to {:.2} MB", size as f64 / 1_048_576.0);
+                size
+            }
+            Err(e) => {
+                // Clean up temp file on error
+                let _ = fs::remove_file(&temp_compressed);
+                return Err(e);
+            }
+        };
+
+        check_cancelled()?;
+
+        // Step 2: Encrypt the compressed data
         log::info!("🔐 Encrypting with AES-256-GCM...");
         emit_progress("encrypting", "Encrypting backup", Some(format!("{:.1} MB", compressed_size as f64 / 1_048_576.0)), None, None);
 
-        let (encrypted, metadata) = encrypt(&processed_data, pwd)
-            .map_err(|e| format!("Encryption failed: {}", e))?;
+        let encryption_result = (|| -> Result<u64, String> {
+            // Read compressed data
+            let compressed_data = fs::read(&temp_compressed)
+                .map_err(|e| format!("Failed to read compressed data: {}", e))?;
 
-        // Embed metadata in file format: [4-byte length][metadata JSON][encrypted data]
-        let metadata_json = serde_json::to_vec(&metadata)
-            .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
+            // Encrypt
+            let (encrypted, metadata) = encrypt(&compressed_data, pwd)
+                .map_err(|e| format!("Encryption failed: {}", e))?;
 
-        let metadata_len = metadata_json.len() as u32;
-        let mut final_data = Vec::with_capacity(4 + metadata_json.len() + encrypted.len());
-        final_data.extend_from_slice(&metadata_len.to_le_bytes());
-        final_data.extend_from_slice(&metadata_json);
-        final_data.extend_from_slice(&encrypted);
+            // Embed metadata in file format: [4-byte length][metadata JSON][encrypted data]
+            let metadata_json = serde_json::to_vec(&metadata)
+                .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
 
-        log::info!("✅ Backup encrypted ({:.2} MB)", final_data.len() as f64 / 1_048_576.0);
-        check_cancelled()?;
-        (final_data, Some(metadata))
-    } else {
-        (processed_data, None)
+            let metadata_len = metadata_json.len() as u32;
+            let mut final_data = Vec::with_capacity(4 + metadata_json.len() + encrypted.len());
+            final_data.extend_from_slice(&metadata_len.to_le_bytes());
+            final_data.extend_from_slice(&metadata_json);
+            final_data.extend_from_slice(&encrypted);
+
+            log::info!("✅ Backup encrypted ({:.2} MB)", final_data.len() as f64 / 1_048_576.0);
+
+            // Write encrypted data to final file
+            fs::write(&backup_path, &final_data)
+                .map_err(|e| format!("Failed to write encrypted backup: {}", e))?;
+
+            Ok(final_data.len() as u64)
+        })();
+
+        // Clean up temp file regardless of success/failure
+        let _ = fs::remove_file(&temp_compressed);
+
+        match encryption_result {
+            Ok(size) => size,
+            Err(e) => {
+                // Clean up partial encrypted file on error
+                let _ = fs::remove_file(&backup_path);
+                return Err(e);
+            }
+        }
     };
 
-    let final_size = final_data.len() as u64;
-
-    // Write to destination
-    log::info!("💾 Writing backup file: {}", backup_filename);
-    emit_progress("writing", "Writing backup file", Some(format!("{:.1} MB", final_size as f64 / 1_048_576.0)), None, None);
-    check_cancelled()?;
-    fs::create_dir_all(dest_path).map_err(|e| format!("Failed to create dest dir: {}", e))?;
-
-    // Write with cleanup on failure
-    if let Err(e) = fs::write(&backup_path, final_data) {
-        // CRITICAL: Clean up partial file on write failure
-        let _ = fs::remove_file(&backup_path);
-        return Err(format!("Failed to write backup: {}", e));
-    }
     log::info!("✅ Backup file saved");
 
     // Calculate checksum
@@ -562,7 +618,7 @@ fn scan_changed_files(
     Ok((changed_files, total_size))
 }
 
-/// Create a tar archive from file list
+/// Create a tar archive from file list (in-memory, for encrypted mode)
 fn create_tar_archive<F>(
     files: &[PathBuf],
     base_path: &Path,
@@ -605,6 +661,75 @@ where
             .map_err(|e| format!("Failed to finalize tar: {}", e))?;
     }
     Ok(tar_data)
+}
+
+/// Create TAR archive with streaming zstd compression directly to file
+/// This avoids loading the entire archive into memory
+fn create_tar_with_streaming_compression<F>(
+    files: &[PathBuf],
+    base_path: &Path,
+    output_file: fs::File,
+    compression_level: i32,
+    cancel_flag: Option<Arc<AtomicBool>>,
+    mut progress_callback: F,
+) -> Result<u64, String>
+where
+    F: FnMut(usize, usize),
+{
+    let total_files = files.len();
+
+    // Create zstd encoder that writes directly to file
+    // This streams: TAR → zstd → file (no intermediate buffers)
+    let mut encoder = zstd::stream::write::Encoder::new(output_file, compression_level)
+        .map_err(|e| format!("Failed to create zstd encoder: {}", e))?;
+
+    // Create TAR builder that writes to the encoder
+    {
+        let mut tar = tar::Builder::new(&mut encoder);
+
+        for (index, file_path) in files.iter().enumerate() {
+            // Check for cancellation every 10 files
+            if index % 10 == 0 {
+                if let Some(ref flag) = cancel_flag {
+                    if flag.load(Ordering::SeqCst) {
+                        log::warn!("🚫 Streaming compression cancelled by user");
+                        return Err("Backup cancelled by user".to_string());
+                    }
+                }
+            }
+
+            let relative_path = file_path
+                .strip_prefix(base_path)
+                .map_err(|e| format!("Failed to get relative path: {}", e))?;
+
+            tar.append_path_with_name(file_path, relative_path)
+                .map_err(|e| format!("Failed to add file to streaming tar: {}", e))?;
+
+            // Emit progress every 50 files or on last file
+            // More frequent updates since we're streaming
+            if (index + 1) % 50 == 0 || index + 1 == total_files {
+                progress_callback(index + 1, total_files);
+            }
+        }
+
+        // Finish TAR archive (flushes to encoder)
+        tar.finish()
+            .map_err(|e| format!("Failed to finalize streaming tar: {}", e))?;
+    } // tar is dropped here, encoder now has all data
+
+    // Finish compression and get final file handle
+    let output_file = encoder.finish()
+        .map_err(|e| format!("Failed to finish zstd compression: {}", e))?;
+
+    // Sync to disk
+    output_file.sync_all()
+        .map_err(|e| format!("Failed to sync file to disk: {}", e))?;
+
+    // Get final compressed size
+    let metadata = output_file.metadata()
+        .map_err(|e| format!("Failed to get file metadata: {}", e))?;
+
+    Ok(metadata.len())
 }
 
 /// Compress data with zstd (level 3 for balanced performance)

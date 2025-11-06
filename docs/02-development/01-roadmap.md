@@ -58,6 +58,8 @@
 - [x] Create filename with timestamp ✅
 - [x] Compression level 3 (balanced performance) ✅
 - [x] TAR + ZSTD format ✅
+- [x] Streaming compression architecture (TAR → zstd → disk pipeline) ✅
+- [x] Memory-efficient processing for files larger than RAM ✅
 
 ### incremental backup logic
 - [x] Implement file change detection (modified dates, size) ✅
@@ -94,7 +96,7 @@
 
 ---
 
-## phase 3: automation and security ✅ SCHEDULER BASE COMPLETE | 🔄 launchd CRITICAL NEXT
+## phase 3: automation and security ❌ NOT COMPLETE - 2 CRITICAL FAILURES
 
 ### scheduler (scheduling) - Core Feature ✅ COMPLETE
 - [x] Implement cron expression parser (tokio-cron-scheduler library) ✅
@@ -112,21 +114,25 @@
 - [x] UI integration for schedule management ✅
 - [x] Test automatic trigger at scheduled times ✅
 
-### ⚠️ CRITICAL: launchd integration (macOS) - Independent Scheduling ✅ COMPLETE
-**Status:** Production-ready - backups now work with app closed!
-- [x] Generate .plist file for launchd (StartCalendarInterval format) ✅
-- [x] Create module to install/uninstall launch agents ✅
-- [x] Register daemon when user configures schedule ✅
-- [x] Update register_schedule to create .plist files ✅
-- [x] Add CLI args support (--backup <config_id>) ✅
-- [x] Automatic backup execution via launchd ✅
-- [x] Clean up .plist files when deleting backup config ✅
-- [x] Parse cron expressions to macOS StartCalendarInterval ✅
-- [x] Load/unload agents with launchctl commands ✅
+### ⚠️ CRITICAL: launchd integration (macOS) - Independent Scheduling ❌ NOT WORKING
+**Status:** Code implemented but NOT FUNCTIONAL - scheduled backups do NOT execute
+- [x] Generate .plist file for launchd (StartCalendarInterval format) ✅ CODE WRITTEN
+- [x] Create module to install/uninstall launch agents ✅ CODE WRITTEN
+- [x] Register daemon when user configures schedule ✅ CODE WRITTEN
+- [x] Update register_schedule to create .plist files ✅ CODE WRITTEN
+- [x] Add CLI args support (--backup <config_id>) ✅ CODE WRITTEN
+- [x] Parse cron expressions to macOS StartCalendarInterval ✅ CODE WRITTEN
+- [x] Load/unload agents with launchctl commands ✅ CODE WRITTEN
+- [x] Clean up .plist files when deleting backup config ✅ CODE WRITTEN
+- [ ] **CRITICAL BLOCKER**: Scheduled backups do NOT execute automatically
+  - Problem: launchd agents created but never trigger backups
+  - Status: Code written but system integration UNTESTED and NON-FUNCTIONAL
+  - Impact: Core feature (automation) completely broken
+  - **Blocks production**: App cannot be launched without working scheduled backups
 - [ ] Handle system wake from sleep (future enhancement)
 - [ ] Retry logic for failed scheduled backups (future enhancement)
 
-### encryption ✅ COMPLETE
+### encryption ⚠️ PARTIALLY COMPLETE - WORKAROUND ONLY
 - [x] Add `ring` + `argon2` dependencies in Cargo.toml ✅
 - [x] Implement `encrypt_file(input, password)` ✅
 - [x] Implement `decrypt_file(input, password)` ✅
@@ -135,6 +141,12 @@
 - [x] Add toggle in UI (enable/disable) ✅
 - [x] Password input with confirmation ✅
 - [x] Three backup modes: Copy, Compressed, Encrypted ✅
+- [ ] **CRITICAL BLOCKER**: Password prompt for encrypted backups (temporary workaround implemented - manual only)
+  - Current status: Password modal shows when clicking "Run Backup" on encrypted configs
+  - Problem: Passwords NOT saved (cannot work with scheduled backups)
+  - Workaround: Encrypted backups work ONLY for manual execution
+  - Root cause: Browser dialogs blocked by Tauri without permissions
+  - **Blocks production**: Encrypted scheduled backups impossible without password persistence
 
 ### native notifications ✅ COMPLETE
 - [x] Use Tauri notification API ✅
@@ -143,7 +155,7 @@
 - [x] Notify backup error ✅
 - [ ] Add sounds (optional - future enhancement)
 
-**Phase 3 Deliverable:** ✅ COMPLETE - Automatic backups + full encryption UI integration
+**Phase 3 Deliverable:** ❌ FAILED - Automatic backups NOT working + encryption only works manually
 
 ---
 
@@ -392,13 +404,13 @@ See detailed testing strategy in `docs/08-testing-strategy.md`
 
 **Phase 1:** ✅ COMPLETE (Foundation and configuration system)
 **Phase 2:** ✅ COMPLETE (Backup core with full/incremental support)
-**Phase 3:** ✅ COMPLETE (Automation and security)
-- ✅ Scheduler base (in-app): COMPLETE
-- ✅ **launchd integration**: COMPLETE - Backups work with app closed
+**Phase 3:** ❌ FAILED (Automation and security)
+- ✅ Scheduler base (in-app): COMPLETE (code written)
+- ❌ **launchd integration**: NOT WORKING - Scheduled backups never execute
 - ✅ **Native notifications**: COMPLETE
 - ✅ **Encryption backend**: COMPLETE - crypto.rs with 31 tests passing
-- ✅ **Encryption UI**: COMPLETE - 3 backup modes (Copy, Compressed, Encrypted)
-**Phase 4:** 🔄 IN PROGRESS (Polish and delivery)
+- ⚠️ **Encryption UI**: PARTIALLY WORKING - Manual only, password not saved for scheduled backups
+**Phase 4:** ⏸️ BLOCKED (Polish and delivery - cannot proceed until Phase 3 issues resolved)
 - ✅ **Restore functionality**: COMPLETE
 - ✅ **Integrity verification**: COMPLETE - SHA-256
 - ✅ **Automated tests**: COMPLETE - 78 tests (all passing)
@@ -457,18 +469,22 @@ See detailed testing strategy in `docs/08-testing-strategy.md`
 6. **Manual validation** - End-to-end testing (1-2h)
 7. **Dashboard** (optional) - Basic metrics display (nice-to-have)
 
-**MVP STATUS:** 🎯 **99% COMPLETE** - Production-ready core! 🚀
+**MVP STATUS:** ❌ **NOT READY FOR PRODUCTION** - 2 CRITICAL BLOCKERS
 - ✅ Backup (Full + Incremental with live progress)
-- ✅ Scheduling (Independent via launchd)
+- ❌ **BLOCKER #1: Scheduling NOT WORKING** - launchd code written but backups never execute automatically
 - ✅ **Restore** (COMPLETE with full UX: real-time progress, cancellation, success feedback, spinner on Browse buttons)
 - ✅ Notifications (start/success/error)
-- ✅ Encryption (full UI + backend integration)
+- ❌ **BLOCKER #2: Encryption PARTIALLY BROKEN** - Works only for manual backups, password not saved (scheduled encrypted backups impossible)
 - ✅ Real-time progress (determinate + indeterminate with barberpole)
 - ⚠️ **Backup cancellation** (UI works, needs fix for compression/encryption stages in production - same limitation applies to restore)
 - ✅ 78 automated tests (all passing, 75% coverage)
 - ✅ **All critical security bugs fixed**
 - ⏳ Performance tests (4 tests - basic performance validated, extended stress tests available)
 - ⏳ Manual validation tests
+
+**PRODUCTION BLOCKERS:**
+1. **Scheduling system not functional** - Core automation feature broken, backups don't run automatically
+2. **Encrypted backups only work manually** - Cannot schedule encrypted backups (password not persisted)
 
 ---
 

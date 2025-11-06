@@ -164,6 +164,7 @@ pub async fn run_backup_now(
     app: AppHandle,
     state: State<'_, AppState>,
     config_id: String,
+    password: Option<String>,
 ) -> Result<BackupResult, String> {
     // Create cancellation flag for this backup
     let cancel_flag = Arc::new(AtomicBool::new(false));
@@ -220,8 +221,9 @@ pub async fn run_backup_now(
         None
     };
 
-    // TODO: Get password from config when encryption UI is implemented
-    let password = config.encryption_password.as_deref();
+    // Use password from parameter (provided by UI prompt)
+    // Password is NEVER saved in config for security reasons
+    let password_ref = password.as_deref();
 
     // Perform backup with cancellation support
     let backup_result = backup::compress_folder(
@@ -232,7 +234,7 @@ pub async fn run_backup_now(
         &config.mode,
         previous_manifest.as_ref(),
         Some(&app),
-        password,
+        password_ref,
         Some(Arc::clone(&cancel_flag)),
     );
 

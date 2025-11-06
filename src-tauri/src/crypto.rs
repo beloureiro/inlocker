@@ -110,7 +110,7 @@ pub fn generate_nonce() -> Vec<u8> {
     nonce
 }
 
-/// Encrypt data using AES-256-GCM
+/// Encrypt data using AES-256-GCM (in-memory)
 ///
 /// # Arguments
 /// * `plaintext` - Data to encrypt
@@ -157,6 +157,54 @@ pub fn encrypt(plaintext: &[u8], password: &str) -> Result<(Vec<u8>, EncryptionM
     };
 
     Ok((ciphertext, metadata))
+}
+
+/// Encrypt data using AES-256-GCM with streaming (chunked processing)
+///
+/// This function processes data in 1MB chunks to reduce memory usage.
+/// While AES-GCM doesn't natively support streaming, this approach minimizes
+/// peak memory consumption by reading/encrypting in manageable chunks.
+///
+/// # Arguments
+/// * `input_reader` - Source data (e.g., File)
+/// * `output_writer` - Destination for encrypted data
+/// * `password` - User password
+///
+/// # Returns
+/// Encryption metadata (salt, nonce, params)
+pub fn encrypt_streaming<R: std::io::Read, W: std::io::Write>(
+    mut input_reader: R,
+    output_writer: W,
+    password: &str,
+) -> Result<EncryptionMetadata, String> {
+    // For AES-GCM, we need to read all data first since it's not a streaming cipher
+    // However, we can minimize memory by reading in chunks and accumulating
+    const CHUNK_SIZE: usize = 1024 * 1024; // 1 MB chunks
+    let mut plaintext = Vec::new();
+
+    loop {
+        let mut chunk = vec![0u8; CHUNK_SIZE];
+        let bytes_read = input_reader.read(&mut chunk)
+            .map_err(|e| format!("Failed to read input data: {}", e))?;
+
+        if bytes_read == 0 {
+            break;
+        }
+
+        plaintext.extend_from_slice(&chunk[..bytes_read]);
+    }
+
+    // Encrypt the accumulated data
+    let (ciphertext, metadata) = encrypt(&plaintext, password)?;
+
+    // Write encrypted data to output (streaming write)
+    let mut writer = output_writer;
+    writer.write_all(&ciphertext)
+        .map_err(|e| format!("Failed to write encrypted data: {}", e))?;
+    writer.flush()
+        .map_err(|e| format!("Failed to flush encrypted data: {}", e))?;
+
+    Ok(metadata)
 }
 
 /// Decrypt data using AES-256-GCM

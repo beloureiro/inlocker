@@ -21,6 +21,9 @@ export function BackupList() {
   const [backupStartTimes, setBackupStartTimes] = useState<Map<string, number>>(new Map());
   const [elapsedTimes, setElapsedTimes] = useState<Map<string, number>>(new Map());
   const [backupProgress, setBackupProgress] = useState<Map<string, BackupProgress>>(new Map());
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  const [passwordPrompt, setPasswordPrompt] = useState<{ configId: string; show: boolean }>({ configId: '', show: false });
+  const [passwordInput, setPasswordInput] = useState('');
 
   // Debounce loadConfigs to avoid multiple re-renders during parallel backups
   const loadConfigsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -148,6 +151,26 @@ export function BackupList() {
 
   const handleRunBackup = async (configId: string) => {
     console.log('[BackupList] Starting backup for config:', configId);
+
+    // Check if this backup is encrypted and needs a password
+    const config = configs.find(c => c.id === configId);
+    if (!config) {
+      alert('Backup configuration not found');
+      return;
+    }
+
+    // For encrypted backups, show password prompt
+    if (config.mode === 'encrypted') {
+      setPasswordPrompt({ configId, show: true });
+      return; // Will continue after password is entered
+    }
+
+    // Continue with backup execution
+    executeBackup(configId, null);
+  };
+
+  const executeBackup = async (configId: string, password: string | null) => {
+
     const startTime = Date.now();
 
     setRunningBackups((prev) => new Set(prev).add(configId));
@@ -158,9 +181,15 @@ export function BackupList() {
       return newMap;
     });
 
+    // Auto-expand when backup starts
+    setExpandedCards((prev) => new Set(prev).add(configId));
+
     try {
       console.log('[BackupList] Calling run_backup_now...');
-      const result = await invoke('run_backup_now', { configId });
+      const result = await invoke('run_backup_now', {
+        configId,
+        password: password || undefined
+      });
       console.log('[BackupList] Backup result:', result);
 
       setBackupResults((prev) => {
@@ -240,6 +269,35 @@ export function BackupList() {
     }
   };
 
+  const toggleCard = (configId: string) => {
+    setExpandedCards((prev) => {
+      const next = new Set(prev);
+      if (next.has(configId)) {
+        next.delete(configId);
+      } else {
+        next.add(configId);
+      }
+      return next;
+    });
+  };
+
+  const handlePasswordSubmit = () => {
+    if (!passwordInput || passwordInput.trim() === '') {
+      alert('Password cannot be empty');
+      return;
+    }
+    const configId = passwordPrompt.configId;
+    setPasswordPrompt({ configId: '', show: false });
+    const pwd = passwordInput;
+    setPasswordInput('');
+    executeBackup(configId, pwd);
+  };
+
+  const handlePasswordCancel = () => {
+    setPasswordPrompt({ configId: '', show: false });
+    setPasswordInput('');
+  };
+
   return (
     <>
       {editingConfig && (
@@ -248,6 +306,37 @@ export function BackupList() {
           onSave={handleSaveConfig}
           onClose={() => setEditingConfig(null)}
         />
+      )}
+
+      {passwordPrompt.show && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-96 border border-gray-700">
+            <h3 className="text-lg font-semibold text-white mb-4">Enter Encryption Password</h3>
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()}
+              placeholder="Password"
+              className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white mb-4 focus:outline-none focus:border-emerald-500"
+              autoFocus
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={handlePasswordCancel}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePasswordSubmit}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded text-white transition-colors"
+              >
+                Start Backup
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="space-y-3">
@@ -270,6 +359,7 @@ export function BackupList() {
         {configs.map((config: BackupConfig) => {
         const isRunning = runningBackups.has(config.id);
         const result = backupResults.get(config.id);
+        const isExpanded = expandedCards.has(config.id) || isRunning;
 
         return (
           <div
@@ -280,6 +370,21 @@ export function BackupList() {
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-2 flex-wrap">
+                  <button
+                    onClick={() => toggleCard(config.id)}
+                    className="flex-shrink-0 text-gray-400 hover:text-gray-300 transition-colors"
+                    aria-label={isExpanded ? "Collapse" : "Expand"}
+                  >
+                    <svg
+                      className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
                   <h3 className="text-sm font-medium text-white">{config.name}</h3>
                   <span className={`px-2 py-0.5 rounded text-xs ${config.backup_type === 'full' ? 'bg-blue-900 text-blue-300' : 'bg-purple-900 text-purple-300'}`}>
                     {config.backup_type === 'full' ? 'Full' : 'Incremental'}
@@ -313,92 +418,98 @@ export function BackupList() {
                     </span>
                   )}
                 </div>
-                <div className="text-sm space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-400">From:</span>
-                    <span className="text-gray-300 font-mono text-xs">{config.source_path}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-400">To:</span>
-                    <span className="text-gray-300 font-mono text-xs">{config.destination_path}</span>
-                  </div>
-
-                  {/* Grid layout for stats - 2x2 grid */}
-                  <div className="grid grid-cols-2 gap-x-8 gap-y-1 pt-1">
-                    {/* Row 1, Col 1 */}
-                    {config.last_backup_at && (
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-gray-400 text-xs whitespace-nowrap">Last:</span>
-                        <span className="text-gray-300 text-xs whitespace-nowrap">
-                          {new Date(config.last_backup_at * 1000).toLocaleString()}
-                        </span>
+                {isExpanded && (
+                  <>
+                    <div className="text-sm space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-400">From:</span>
+                        <span className="text-gray-300 font-mono text-xs">{config.source_path}</span>
                       </div>
-                    )}
-
-                    {/* Row 1, Col 2 */}
-                    {config.last_backup_original_size && config.last_backup_compressed_size && (
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-gray-400 text-xs whitespace-nowrap">Size:</span>
-                        <span className="text-gray-300 font-mono text-xs whitespace-nowrap">
-                          {(config.last_backup_original_size / 1048576).toFixed(1)} MB → {(config.last_backup_compressed_size / 1048576).toFixed(1)} MB
-                          <span className="text-gray-500 ml-1">
-                            ({((1 - config.last_backup_compressed_size / config.last_backup_original_size) * 100).toFixed(0)}%)
-                          </span>
-                        </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-400">To:</span>
+                        <span className="text-gray-300 font-mono text-xs">{config.destination_path}</span>
                       </div>
-                    )}
 
-                    {/* Row 2, Col 1 */}
-                    {config.last_backup_files_count !== null && config.last_backup_files_count !== undefined && (
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-gray-400 text-xs whitespace-nowrap">Files:</span>
-                        <span className="text-gray-300 text-xs whitespace-nowrap">
-                          {config.last_backup_files_count.toLocaleString()}
-                        </span>
-                      </div>
-                    )}
+                      {/* Grid layout for stats - 2x2 grid */}
+                      <div className="grid grid-cols-2 gap-x-8 gap-y-1 pt-1">
+                        {/* Row 1, Col 1 */}
+                        {config.last_backup_at && (
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-gray-400 text-xs whitespace-nowrap">Last:</span>
+                            <span className="text-gray-300 text-xs whitespace-nowrap">
+                              {new Date(config.last_backup_at * 1000).toLocaleString()}
+                            </span>
+                          </div>
+                        )}
 
-                    {/* Row 2, Col 2 */}
-                    {config.schedule && (
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-gray-400 text-xs whitespace-nowrap">Schedule:</span>
-                        <span className="text-gray-300 font-mono text-xs whitespace-nowrap">
-                          {config.schedule.preset && config.schedule.preset !== 'custom'
-                            ? config.schedule.preset.charAt(0).toUpperCase() + config.schedule.preset.slice(1)
-                            : config.schedule.cron_expression}
-                        </span>
+                        {/* Row 1, Col 2 */}
+                        {config.last_backup_original_size && config.last_backup_compressed_size && (
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-gray-400 text-xs whitespace-nowrap">Size:</span>
+                            <span className="text-gray-300 font-mono text-xs whitespace-nowrap">
+                              {(config.last_backup_original_size / 1048576).toFixed(1)} MB → {(config.last_backup_compressed_size / 1048576).toFixed(1)} MB
+                              <span className="text-gray-500 ml-1">
+                                ({((1 - config.last_backup_compressed_size / config.last_backup_original_size) * 100).toFixed(0)}%)
+                              </span>
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Row 2, Col 1 */}
+                        {config.last_backup_files_count !== null && config.last_backup_files_count !== undefined && (
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-gray-400 text-xs whitespace-nowrap">Files:</span>
+                            <span className="text-gray-300 text-xs whitespace-nowrap">
+                              {config.last_backup_files_count.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Row 2, Col 2 */}
+                        {config.schedule && (
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-gray-400 text-xs whitespace-nowrap">Schedule:</span>
+                            <span className="text-gray-300 font-mono text-xs whitespace-nowrap">
+                              {config.schedule.preset && config.schedule.preset !== 'custom'
+                                ? config.schedule.preset.charAt(0).toUpperCase() + config.schedule.preset.slice(1)
+                                : config.schedule.cron_expression}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  </>
+                )}
                 </div>
-                </div>
 
-                <div className="flex flex-col gap-1.5 min-w-[110px]">
-                  <button
-                    onClick={() => handleRunBackup(config.id)}
-                    disabled={isRunning}
-                    className="px-3 py-1 bg-emerald-700 hover:bg-emerald-600 disabled:bg-gray-700 disabled:cursor-not-allowed rounded text-xs font-medium transition-colors whitespace-nowrap"
-                  >
-                    {isRunning ? 'Running...' : 'Run Backup'}
-                  </button>
-                  <button
-                    onClick={() => setEditingConfig(config)}
-                    className="px-3 py-1 text-xs text-gray-300 hover:text-white hover:bg-gray-800 rounded transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
-                    title="Configure backup settings"
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 011.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.56.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.893.149c-.425.07-.765.383-.93.78-.165.398-.143.854.107 1.204l.527.738c.32.447.269 1.06-.12 1.45l-.774.773a1.125 1.125 0 01-1.449.12l-.738-.527c-.35-.25-.806-.272-1.203-.107-.397.165-.71.505-.781.929l-.149.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527c-.447.32-1.06.269-1.45-.12l-.773-.774a1.125 1.125 0 01-.12-1.45l.527-.737c.25-.35.273-.806.108-1.204-.165-.397-.505-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.107-1.204l-.527-.738a1.125 1.125 0 01.12-1.45l.773-.773a1.125 1.125 0 011.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    Settings
-                  </button>
-                  <button
-                    onClick={() => handleDelete(config.id)}
-                    className="px-3 py-1 text-xs text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition-colors whitespace-nowrap"
-                  >
-                    Delete
-                  </button>
-                </div>
+                {isExpanded && (
+                  <div className="flex flex-col gap-1.5 min-w-[110px]">
+                    <button
+                      onClick={() => handleRunBackup(config.id)}
+                      disabled={isRunning}
+                      className="px-3 py-1 bg-emerald-700 hover:bg-emerald-600 disabled:bg-gray-700 disabled:cursor-not-allowed rounded text-xs font-medium transition-colors whitespace-nowrap"
+                    >
+                      {isRunning ? 'Running...' : 'Run Backup'}
+                    </button>
+                    <button
+                      onClick={() => setEditingConfig(config)}
+                      className="px-3 py-1 text-xs text-gray-300 hover:text-white hover:bg-gray-800 rounded transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
+                      title="Configure backup settings"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 011.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.56.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.893.149c-.425.07-.765.383-.93.78-.165.398-.143.854.107 1.204l.527.738c.32.447.269 1.06-.12 1.45l-.774.773a1.125 1.125 0 01-1.449.12l-.738-.527c-.35-.25-.806-.272-1.203-.107-.397.165-.71.505-.781.929l-.149.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527c-.447.32-1.06.269-1.45-.12l-.773-.774a1.125 1.125 0 01-.12-1.45l.527-.737c.25-.35.273-.806.108-1.204-.165-.397-.505-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.107-1.204l-.527-.738a1.125 1.125 0 01.12-1.45l.773-.773a1.125 1.125 0 011.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      Settings
+                    </button>
+                    <button
+                      onClick={() => handleDelete(config.id)}
+                      className="px-3 py-1 text-xs text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition-colors whitespace-nowrap"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 

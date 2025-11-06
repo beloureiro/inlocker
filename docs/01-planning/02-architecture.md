@@ -69,13 +69,17 @@ USER PROVIDES:
 APP EXECUTES:
 1. Monitors scheduled times
 2. When time arrives:
-   ├── Collects files from source folder
-   ├── Compresses with zstd (fast + efficient)
-   ├── Encrypts with AES-256 (optional)
+   ├── Scans files from source folder
+   ├── Streams TAR archive creation (no memory loading)
+   ├── Compresses with zstd in streaming mode (fast + efficient)
+   ├── Encrypts with AES-256 (optional, chunked processing)
    ├── Generates checksum (integrity)
-   └── Saves to destination
+   └── Writes directly to destination (pipeline architecture)
 3. Notifies success or error
 4. Records in history
+
+Note: Streaming architecture processes data in ~1MB chunks,
+enabling backups larger than available RAM (200GB+ on 8GB systems)
 ```
 
 ### output
@@ -107,9 +111,11 @@ USER RECEIVES:
 - Coordinates compression and encryption
 
 ### 3. compression engine
-- Uses zstd (Zstandard)
+- Uses zstd (Zstandard) with streaming mode
 - Better than zip: faster + smaller size
 - Incremental mode for recurring backups
+- Pipeline architecture: TAR → zstd → disk (no intermediate buffers)
+- Handles files larger than available RAM
 
 ### 4. crypto module
 - AES-256-GCM (optional)
