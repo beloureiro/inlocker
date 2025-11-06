@@ -51,6 +51,19 @@ pub async fn select_folder(app: AppHandle) -> Result<Option<String>, String> {
     Ok(folder.map(|path| path.to_string()))
 }
 
+/// Open file picker dialog and return selected file path
+#[tauri::command]
+pub async fn select_file(app: AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let file = app.dialog()
+        .file()
+        .add_filter("Backup Files", &["zst", "enc"])
+        .blocking_pick_file();
+
+    Ok(file.map(|path| path.to_string()))
+}
+
 /// Save a backup configuration
 #[tauri::command]
 pub async fn save_config(
@@ -393,6 +406,8 @@ pub async fn list_available_backups(config_id: String, state: State<'_, AppState
 /// Restore a backup to a specified location
 #[tauri::command]
 pub async fn restore_backup(
+    app: AppHandle,
+    state: State<'_, AppState>,
     backup_file_path: String,
     restore_destination: String,
     expected_checksum: Option<String>,
@@ -405,7 +420,30 @@ pub async fn restore_backup(
         return Err("Backup file not found".to_string());
     }
 
-    backup::restore_backup(backup_path, restore_path, expected_checksum, password.as_deref())
+    // Create cancellation flag for this restore
+    let cancel_flag = Arc::new(AtomicBool::new(false));
+    {
+        let mut flags = state.cancel_flags.lock().map_err(|e| e.to_string())?;
+        // Use a special key for restore operations
+        flags.insert(format!("restore-{}", backup_file_path), Arc::clone(&cancel_flag));
+    }
+
+    let result = backup::restore_backup(
+        backup_path,
+        restore_path,
+        expected_checksum,
+        password.as_deref(),
+        Some(&app),
+        Some(Arc::clone(&cancel_flag)),
+    );
+
+    // Clean up cancellation flag
+    {
+        let mut flags = state.cancel_flags.lock().map_err(|e| e.to_string())?;
+        flags.remove(&format!("restore-{}", backup_file_path));
+    }
+
+    result
 }
 
 /// Cancel a running backup
@@ -422,6 +460,25 @@ pub async fn cancel_backup(
         Ok(true)
     } else {
         // No backup running with this config_id
+        Ok(false)
+    }
+}
+
+/// Cancel a running restore
+#[tauri::command]
+pub async fn cancel_restore(
+    state: State<'_, AppState>,
+    backup_file_path: String,
+) -> Result<bool, String> {
+    let flags = state.cancel_flags.lock().map_err(|e| e.to_string())?;
+    let restore_key = format!("restore-{}", backup_file_path);
+
+    if let Some(flag) = flags.get(&restore_key) {
+        flag.store(true, std::sync::atomic::Ordering::SeqCst);
+        log::info!("Cancellation requested for restore: {}", backup_file_path);
+        Ok(true)
+    } else {
+        // No restore running with this backup_file_path
         Ok(false)
     }
 }

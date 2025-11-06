@@ -44,11 +44,13 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             commands::select_folder,
+            commands::select_file,
             commands::save_config,
             commands::load_configs,
             commands::delete_config,
             commands::run_backup_now,
             commands::cancel_backup,
+            commands::cancel_restore,
             commands::register_schedule,
             commands::unregister_schedule,
             commands::check_schedule_status,

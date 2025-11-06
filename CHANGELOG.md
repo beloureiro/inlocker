@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2025-11-06
+
+### Features
+
+- **restore:** implement progress tracking and cancellation support
+
+  - Add restore progress events for all stages (verifying, decrypting, decompressing, extracting)
+  - Implement cancellation flag checks throughout restore process
+  - Add AppHandle parameter for emitting progress events to frontend
+  - Document technical limitations (decryption/decompression cannot be interrupted)
+  - Add intelligent cancellation checks before and after blocking operations
+
 ## [0.3.0] - 2025-11-06
 
 ### Features

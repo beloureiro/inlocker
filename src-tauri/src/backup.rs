@@ -723,15 +723,42 @@ pub fn restore_backup(
     restore_destination: &Path,
     expected_checksum: Option<String>,
     password: Option<&str>,
+    app: Option<&tauri::AppHandle>,
+    cancel_flag: Option<Arc<AtomicBool>>,
 ) -> Result<RestoreResult, String> {
     let started_at = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64;
 
+    log::info!("🔄 Starting restore from: {:?}", backup_file_path);
+
+    // Emit initial progress event
+    if let Some(app_handle) = app {
+        let _ = app_handle.emit("restore:progress", serde_json::json!({
+            "stage": "preparing",
+            "message": "Preparing to restore...",
+            "details": "Loading backup file"
+        }));
+    }
+
+    // Check cancellation
+    if let Some(ref flag) = cancel_flag {
+        if flag.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err("Restore cancelled by user".to_string());
+        }
+    }
+
     // Verify integrity if checksum is provided
     if let Some(expected) = expected_checksum {
         log::info!("🔍 Verifying backup integrity...");
+        if let Some(app_handle) = app {
+            let _ = app_handle.emit("restore:progress", serde_json::json!({
+                "stage": "verifying",
+                "message": "Verifying backup integrity...",
+                "details": "Calculating checksum"
+            }));
+        }
         let actual_checksum = calculate_checksum(backup_file_path)?;
 
         // 🔒 SECURITY NOTE: Constant-time comparison for checksums
@@ -770,7 +797,22 @@ pub fn restore_backup(
         log::warn!("⚠️  No checksum provided - skipping integrity verification");
     }
 
+    // Check cancellation
+    if let Some(ref flag) = cancel_flag {
+        if flag.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err("Restore cancelled by user".to_string());
+        }
+    }
+
     // Read backup file (possibly encrypted)
+    if let Some(app_handle) = app {
+        let _ = app_handle.emit("restore:progress", serde_json::json!({
+            "stage": "reading",
+            "message": "Reading backup file...",
+            "details": "Loading data"
+        }));
+    }
+
     let file_data = fs::read(backup_file_path)
         .map_err(|e| format!("Failed to read backup file: {}", e))?;
 
@@ -784,6 +826,20 @@ pub fn restore_backup(
     // Decrypt if needed
     let compressed_data = if is_encrypted {
         log::info!("🔓 Decrypting backup...");
+        if let Some(app_handle) = app {
+            let _ = app_handle.emit("restore:progress", serde_json::json!({
+                "stage": "decrypting",
+                "message": "Decrypting backup...",
+                "details": "Using AES-256-GCM (cannot be interrupted)"
+            }));
+        }
+
+        // Check cancellation before starting expensive operation
+        if let Some(ref flag) = cancel_flag {
+            if flag.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err("Restore cancelled by user".to_string());
+            }
+        }
 
         let pwd = password.ok_or_else(|| {
             "Backup is encrypted but no password provided. Please provide the password used during backup.".to_string()
@@ -811,8 +867,18 @@ pub fn restore_backup(
 
         let encrypted_data = &file_data[4 + metadata_len..];
 
+        // NOTE: Decryption is blocking and cannot be interrupted
+        // We check for cancellation immediately after it completes
         let decrypted = decrypt(encrypted_data, pwd, &metadata)
             .map_err(|e| format!("Decryption failed: {}. Please verify your password is correct.", e))?;
+
+        // Check cancellation immediately after decryption
+        if let Some(ref flag) = cancel_flag {
+            if flag.load(std::sync::atomic::Ordering::SeqCst) {
+                log::warn!("⚠️  Restore cancelled after decryption completed");
+                return Err("Restore cancelled by user".to_string());
+            }
+        }
 
         log::info!("✅ Backup decrypted successfully");
         decrypted
@@ -831,17 +897,58 @@ pub fn restore_backup(
 
     let is_compressed = file_name.contains(".zst");
 
+    // Check cancellation
+    if let Some(ref flag) = cancel_flag {
+        if flag.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err("Restore cancelled by user".to_string());
+        }
+    }
+
     let tar_data = if is_compressed {
         log::info!("📦 Decompressing backup...");
-        decompress_with_zstd(&compressed_data)?
+        if let Some(app_handle) = app {
+            let _ = app_handle.emit("restore:progress", serde_json::json!({
+                "stage": "decompressing",
+                "message": "Decompressing backup...",
+                "details": "Using zstd (cannot be interrupted)"
+            }));
+        }
+
+        // NOTE: zstd decompression is blocking and cannot be interrupted
+        // We check for cancellation immediately after it completes
+        let decompressed = decompress_with_zstd(&compressed_data)?;
+
+        // Check cancellation immediately after decompression
+        if let Some(ref flag) = cancel_flag {
+            if flag.load(std::sync::atomic::Ordering::SeqCst) {
+                log::warn!("⚠️  Restore cancelled after decompression completed");
+                return Err("Restore cancelled by user".to_string());
+            }
+        }
+
+        decompressed
     } else {
         log::info!("📋 Copy mode - no decompression needed");
         compressed_data
     };
 
+    // Check cancellation
+    if let Some(ref flag) = cancel_flag {
+        if flag.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err("Restore cancelled by user".to_string());
+        }
+    }
+
     // Extract tar archive
     log::info!("📂 Extracting files...");
-    let files_extracted = extract_tar_archive(&tar_data, restore_destination)?;
+    if let Some(app_handle) = app {
+        let _ = app_handle.emit("restore:progress", serde_json::json!({
+            "stage": "extracting",
+            "message": "Extracting files...",
+            "details": "Unpacking archive"
+        }));
+    }
+    let files_extracted = extract_tar_archive(&tar_data, restore_destination, app, cancel_flag.clone())?;
 
     let completed_at = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -865,7 +972,12 @@ fn decompress_with_zstd(data: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 /// Extract tar archive to destination
-fn extract_tar_archive(tar_data: &[u8], destination: &Path) -> Result<usize, String> {
+fn extract_tar_archive(
+    tar_data: &[u8],
+    destination: &Path,
+    app: Option<&tauri::AppHandle>,
+    cancel_flag: Option<Arc<AtomicBool>>,
+) -> Result<usize, String> {
     use std::io::Cursor;
 
     let cursor = Cursor::new(tar_data);
@@ -878,6 +990,13 @@ fn extract_tar_archive(tar_data: &[u8], destination: &Path) -> Result<usize, Str
     // Extract all files
     let mut count = 0;
     for entry_result in archive.entries().map_err(|e| format!("Failed to read tar entries: {}", e))? {
+        // Check cancellation
+        if let Some(ref flag) = cancel_flag {
+            if flag.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err("Restore cancelled by user".to_string());
+            }
+        }
+
         let mut entry = entry_result.map_err(|e| format!("Failed to read tar entry: {}", e))?;
 
         let path = destination.join(entry.path().map_err(|e| format!("Invalid path in tar: {}", e))?);
@@ -893,6 +1012,18 @@ fn extract_tar_archive(tar_data: &[u8], destination: &Path) -> Result<usize, Str
             .map_err(|e| format!("Failed to extract file: {}", e))?;
 
         count += 1;
+
+        // Emit progress every 100 files
+        if count % 100 == 0 {
+            if let Some(app_handle) = app {
+                let _ = app_handle.emit("restore:progress", serde_json::json!({
+                    "stage": "extracting",
+                    "message": "Extracting files...",
+                    "details": format!("{} files extracted", count),
+                    "current": count
+                }));
+            }
+        }
     }
 
     Ok(count)
