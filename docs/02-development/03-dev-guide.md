@@ -8,6 +8,9 @@ Quick reference for daily development and debugging.
 
 ### Development
 ```bash
+
+## Limpe o cache de build:
+rm -rf dist node_modules/.vite && pnpm tauri dev
 # Run app with hot reload
 pnpm tauri dev
 
@@ -16,6 +19,11 @@ pnpm tauri build
 
 # Type check (no emit)
 tsc --noEmit
+```
+
+## Mate todos os processos:
+```
+pkill -9 -f "vite" && pkill -9 -f "inlocker" && pkill -9 -f "tauri"
 ```
 
 ### Rust Backend
