@@ -419,7 +419,28 @@ See detailed testing strategy in `docs/08-testing-strategy.md`
 - [ ] **CLI encryption support**: Add password support to scheduled backups (launchd mode)
 - [ ] **Lock optimization**: Replace Mutex with RwLock in AppState for concurrent reads
 - [ ] **Launchd logging**: Move logs from /tmp to persistent location for easier debugging
-- ✅ **Restore button not working**: FIXED - list_backups() now includes .tar.zst.enc files (backup.rs:918), added password prompt in UI (BackupList.tsx:215-225)
+- ✅ **Restore button in BackupList**: REMOVED - Non-functional button removed from card UI (Bug #001 resolved by removal)
+- ✅ **RestoreSelector component**: COMPLETE - Fully functional restore with camelCase parameter fix
+  - ✅ File and folder selection dialogs with spinner feedback (shows "Opening..." while macOS Finder loads)
+  - ✅ Restore operation with proper parameter serialization (camelCase → snake_case)
+  - ✅ Success result box similar to "Backup Successful" (shows files count, duration, destination)
+  - ✅ Collapsible cancellation behavior info (chevron to expand/collapse)
+- ✅ **Restore progress tracking**: COMPLETE - Real-time progress bar during restore with stage indicators
+  - ✅ Stage-specific information (verifying, decrypting, decompressing, extracting)
+  - ✅ Smart progress messages for each operation
+  - ✅ File extraction count displayed every 100 files
+- ✅ **Restore cancellation**: COMPLETE - Cancel button with 'X' to interrupt restore operation
+  - ⚠️ **Technical Limitation**: Decryption (AES-256) and decompression (zstd) cannot be interrupted (blocking operations)
+  - ✅ Cancellation checked before and immediately after blocking operations
+  - ✅ File extraction can be cancelled at any time (checked per file)
+  - ✅ Intelligent feedback: UI shows different messages based on current stage when cancel is requested
+  - ✅ Educational disclaimer: Explains what can/cannot be cancelled and why (library limitations)
+- ✅ **Restore progress events**: COMPLETE - Backend events for all stages (preparing, verifying, reading, decrypting, decompressing, extracting)
+- ✅ **Restore UX polish**: COMPLETE
+  - ✅ Removed all emojis (professional design consistency)
+  - ✅ Spinner on Browse buttons during Finder dialog
+  - ✅ Success message with duration and file count
+  - ✅ Collapsible technical info (doesn't distract user)
 - ✅ **Parallel backups UI**: FIXED - Added debounced loadConfigs() to prevent re-render issues, moved config reload to finally block (BackupList.tsx:29-36, 166)
 - ✅ **InLog system**: COMPLETE - Automatic changelog generation with git hooks (scripts/git/update-changelog.mjs, .husky/post-commit, CHANGELOG.md)
 - ⏳ **Performance tests**: PENDING (4 tests implemented, optional long-duration tests available)
@@ -436,14 +457,14 @@ See detailed testing strategy in `docs/08-testing-strategy.md`
 6. **Manual validation** - End-to-end testing (1-2h)
 7. **Dashboard** (optional) - Basic metrics display (nice-to-have)
 
-**MVP STATUS:** 🎯 **99.5% COMPLETE** - Production-ready core! 🚀
+**MVP STATUS:** 🎯 **99% COMPLETE** - Production-ready core! 🚀
 - ✅ Backup (Full + Incremental with live progress)
 - ✅ Scheduling (Independent via launchd)
-- ✅ **Restore** (works for compressed and encrypted backups, 4 tests passing)
+- ✅ **Restore** (COMPLETE with full UX: real-time progress, cancellation, success feedback, spinner on Browse buttons)
 - ✅ Notifications (start/success/error)
 - ✅ Encryption (full UI + backend integration)
 - ✅ Real-time progress (determinate + indeterminate with barberpole)
-- ⚠️ **Backup cancellation** (UI works, needs fix for compression/encryption stages in production)
+- ⚠️ **Backup cancellation** (UI works, needs fix for compression/encryption stages in production - same limitation applies to restore)
 - ✅ 78 automated tests (all passing, 75% coverage)
 - ✅ **All critical security bugs fixed**
 - ⏳ Performance tests (4 tests - basic performance validated, extended stress tests available)
@@ -483,7 +504,3 @@ Integration Tests:                   70 tests
 ─────────────────────────────────────────────
 Total:                               77 tests
 ```
-
----
-
-**Last Updated**: 2025-11-05 (FIXED: restore button works for encrypted backups + parallel backups UI now properly displays multiple running backups; ADDED: InLog automatic changelog system with git hooks; TODO: cancellation fails in production during compression/encryption stages; CLI mode needs encryption support; locks optimization needed for concurrent backups)
