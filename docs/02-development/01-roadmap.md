@@ -493,14 +493,14 @@ See detailed testing strategy in `docs/08-testing-strategy.md`
 **Test Distribution:**
 ```
 Unit Tests (lib.rs):                  7 tests
-Integration Tests:                   70 tests
-  ├─ critical_backup_tests.rs        10 tests
+Integration Tests:                   71 tests
+  ├─ critical_backup_tests.rs        11 tests
   ├─ adversarial_tests.rs            10 tests
-  ├─ critical_security_tests.rs       9 tests (9 passing)
+  ├─ critical_security_tests.rs       9 tests
   ├─ crypto_tests.rs                 31 tests
   ├─ security_tests.rs                5 tests
   ├─ backup_restore_integration.rs    1 test
-  └─ performance_tests.rs             4 tests (includes stress tests for extended validation)
+  └─ performance_tests.rs             4 tests
 ─────────────────────────────────────────────
-Total:                               77 tests
+Total:                               78 tests
 ```
