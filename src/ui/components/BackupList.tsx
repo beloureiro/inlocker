@@ -119,6 +119,33 @@ export function BackupList() {
     setEditingConfig(null);
   };
 
+  const handleRunAllBackups = async () => {
+    console.log('[BackupList] Running all backups in parallel...');
+
+    // Filter only enabled configs
+    const enabledConfigs = configs.filter(config => config.enabled);
+
+    if (enabledConfigs.length === 0) {
+      alert('No enabled backups to run');
+      return;
+    }
+
+    // Confirm with user
+    const confirmed = window.confirm(
+      `Run ${enabledConfigs.length} backup${enabledConfigs.length > 1 ? 's' : ''} in parallel?\n\n` +
+      enabledConfigs.map(c => `• ${c.name}`).join('\n')
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    // Run all backups in parallel
+    enabledConfigs.forEach(config => {
+      handleRunBackup(config.id);
+    });
+  };
+
   const handleRunBackup = async (configId: string) => {
     console.log('[BackupList] Starting backup for config:', configId);
     const startTime = Date.now();
@@ -213,93 +240,6 @@ export function BackupList() {
     }
   };
 
-  const handleRestore = async (configId: string) => {
-    try {
-      // List available backups
-      const backups = await invoke('list_available_backups', { configId });
-
-      if (!Array.isArray(backups) || backups.length === 0) {
-        alert('No backups found for this configuration');
-        return;
-      }
-
-      // Show list of backups to choose from
-      const backupsList = backups.map((b: any, i: number) =>
-        `${i + 1}. ${b.filename} (${(b.size / 1048576).toFixed(1)} MB) - ${new Date(b.created_at * 1000).toLocaleString()}`
-      ).join('\n');
-
-      const choice = prompt(`Select backup to restore:\n\n${backupsList}\n\nEnter number (1-${backups.length}):`);
-
-      if (!choice) return;
-
-      const index = parseInt(choice) - 1;
-      if (isNaN(index) || index < 0 || index >= backups.length) {
-        alert('Invalid selection');
-        return;
-      }
-
-      const selectedBackup = backups[index];
-
-      // Check if backup is encrypted (needs password)
-      const isEncrypted = selectedBackup.filename.endsWith('.enc');
-      let password: string | null = null;
-
-      if (isEncrypted) {
-        password = prompt('This backup is encrypted.\n\nPlease enter the password used during backup:');
-        if (!password) {
-          alert('Password is required to restore encrypted backups');
-          return;
-        }
-      }
-
-      // Ask for restore destination
-      const destination = await invoke<string | null>('select_folder');
-      if (!destination) return;
-
-      // Confirm restore
-      if (!confirm(`Restore backup to:\n${destination}\n\nThis will extract all files from the backup. Continue?`)) {
-        return;
-      }
-
-      // Perform restore
-      setRunningBackups((prev) => new Set(prev).add(configId + '-restore'));
-
-      // Get checksum from config for integrity verification
-      const config = configs.find(c => c.id === configId);
-      const expectedChecksum = config?.last_backup_checksum || null;
-
-      const result = await invoke('restore_backup', {
-        backupFilePath: selectedBackup.path,
-        restoreDestination: destination,
-        expectedChecksum,
-        password,
-      });
-
-      setBackupResults((prev) =>
-        new Map(prev).set(configId, {
-          success: true,
-          message: `Restore completed: ${(result as any).files_count} files restored`,
-        })
-      );
-
-      alert(`Restore successful!\n${(result as any).files_count} files restored to:\n${destination}`);
-    } catch (error) {
-      setBackupResults((prev) =>
-        new Map(prev).set(configId, {
-          success: false,
-          message: `Restore failed: ${error}`,
-        })
-      );
-      alert(`Restore failed: ${error}`);
-    } finally {
-      setRunningBackups((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(configId + '-restore');
-        return newSet;
-      });
-    }
-  };
-
   return (
     <>
       {editingConfig && (
@@ -311,7 +251,22 @@ export function BackupList() {
       )}
 
       <div className="space-y-3">
-        <h2 className="text-sm font-semibold text-gray-300">Saved Backups</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-300">Saved Backups</h2>
+          {configs.length > 1 && (
+            <button
+              onClick={handleRunAllBackups}
+              disabled={runningBackups.size > 0}
+              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:cursor-not-allowed rounded text-xs font-medium transition-colors flex items-center gap-1.5"
+              title="Run all backups in parallel"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+              </svg>
+              Run All Backups ({configs.length})
+            </button>
+          )}
+        </div>
         {configs.map((config: BackupConfig) => {
         const isRunning = runningBackups.has(config.id);
         const result = backupResults.get(config.id);
@@ -416,9 +371,9 @@ export function BackupList() {
                     )}
                   </div>
                 </div>
-              </div>
+                </div>
 
-              <div className="flex flex-col gap-1.5 min-w-[110px]">
+                <div className="flex flex-col gap-1.5 min-w-[110px]">
                   <button
                     onClick={() => handleRunBackup(config.id)}
                     disabled={isRunning}
@@ -426,20 +381,6 @@ export function BackupList() {
                   >
                     {isRunning ? 'Running...' : 'Run Backup'}
                   </button>
-                  {/* Only show Restore button for compressed or encrypted backups */}
-                  {config.mode !== 'copy' && (
-                    <button
-                      onClick={() => handleRestore(config.id)}
-                      disabled={isRunning}
-                      className="px-3 py-1 bg-blue-700 hover:bg-blue-600 disabled:bg-gray-700 disabled:cursor-not-allowed rounded text-xs transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
-                      title="Restore from backup"
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
-                      </svg>
-                      Restore
-                    </button>
-                  )}
                   <button
                     onClick={() => setEditingConfig(config)}
                     className="px-3 py-1 text-xs text-gray-300 hover:text-white hover:bg-gray-800 rounded transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
