@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2025-11-06
+
+### Features
+
+- **restore:** add RestoreSelector component with full UX
+
+  - Implement file and folder selection dialogs with spinner feedback
+  - Add restore operation with proper parameter serialization
+  - Create success result box showing files count, duration, and destination
+  - Add collapsible cancellation behavior info section
+  - Display real-time progress with stage-specific messages
+  - Integrate RestoreSelector into main App
+
 ## [0.2.1] - 2025-11-05
 
 ### Bug Fixes

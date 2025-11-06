@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Layout } from './ui/components/Layout';
 import { FolderSelector } from './ui/components/FolderSelector';
+import { RestoreSelector } from './ui/components/RestoreSelector';
 import { BackupList } from './ui/components/BackupList';
 import { useBackupStore, BackupConfig } from './store/useBackupStore';
 
@@ -64,6 +65,7 @@ function App() {
         {!isLoading && (
           <>
             <FolderSelector onFolderSelected={handleFolderSelected} />
+            <RestoreSelector />
             <BackupList />
           </>
         )}
