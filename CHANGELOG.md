@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4] - 2025-11-07
+
+### Bug Fixes
+
+- **backup:** resolve password prompt timing and timer accuracy issues
+
+  - Password prompt timing:
+  - Move password validation before emit_progress to prevent UI progress bar
+  - appearing when backup will fail immediately due to missing password
+  - Timer accuracy:
+  - Sync frontend timer with backend timestamp (started_at field)
+  - Frontend now displays actual processing time matching backend execution
+  - Eliminates drift between UI timer and real backup duration
+  - Config isolation:
+  - Update Zustand store in-place instead of full reload
+  - Preserves running backup states when editing other configurations
+  - Prevents UI disruption during parallel backup operations
+
 ## [0.5.3] - 2025-11-07
 
 ### Bug Fixes

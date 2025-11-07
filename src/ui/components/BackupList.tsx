@@ -11,6 +11,7 @@ interface BackupProgress {
   details?: string;
   current?: number;  // Files processed so far
   total?: number;     // Total files to process
+  started_at?: number; // Unix timestamp from backend (accurate start time)
 }
 
 export function BackupList() {
@@ -51,6 +52,18 @@ export function BackupList() {
     const unlisten = listen<BackupProgress>('backup:progress', (event) => {
       console.log('[BackupList] Progress event:', event.payload);
       setBackupProgress((prev) => new Map(prev).set(event.payload.config_id, event.payload));
+
+      // Sync frontend timer with backend timestamp if available
+      if (event.payload.started_at !== undefined) {
+        setBackupStartTimes((prev) => {
+          const newMap = new Map(prev);
+          // Only set if not already set (use backend's accurate timestamp)
+          if (!newMap.has(event.payload.config_id)) {
+            newMap.set(event.payload.config_id, event.payload.started_at! * 1000); // Convert to ms
+          }
+          return newMap;
+        });
+      }
     });
 
     return () => {
@@ -125,26 +138,43 @@ export function BackupList() {
   const handleRunAllBackups = async () => {
     console.log('[BackupList] Running all backups in parallel...');
 
-    // Filter only enabled configs
+    // Separate encrypted from non-encrypted enabled configs
     const enabledConfigs = configs.filter(config => config.enabled);
+    const nonEncryptedConfigs = enabledConfigs.filter(config => config.mode !== 'encrypted');
+    const encryptedConfigs = enabledConfigs.filter(config => config.mode === 'encrypted');
 
     if (enabledConfigs.length === 0) {
       alert('No enabled backups to run');
       return;
     }
 
-    // Confirm with user
-    const confirmed = window.confirm(
-      `Run ${enabledConfigs.length} backup${enabledConfigs.length > 1 ? 's' : ''} in parallel?\n\n` +
-      enabledConfigs.map(c => `• ${c.name}`).join('\n')
-    );
+    if (nonEncryptedConfigs.length === 0) {
+      alert('All enabled backups are encrypted.\n\nEncrypted backups require individual passwords and must be run separately.\n\nClick "Run Backup" on each encrypted backup to enter its password.');
+      return;
+    }
+
+    // Build clear confirmation message
+    let confirmMessage = `Run ${nonEncryptedConfigs.length} of ${enabledConfigs.length} enabled backup${enabledConfigs.length > 1 ? 's' : ''}?\n\n`;
+
+    // List backups that WILL run
+    confirmMessage += '✓ Will run:\n';
+    confirmMessage += nonEncryptedConfigs.map(c => `  • ${c.name} (${c.mode})`).join('\n');
+
+    // List encrypted backups that will be SKIPPED
+    if (encryptedConfigs.length > 0) {
+      confirmMessage += '\n\n✗ Skipped (encrypted - run manually):\n';
+      confirmMessage += encryptedConfigs.map(c => `  • ${c.name}`).join('\n');
+      confirmMessage += '\n\nEncrypted backups require individual passwords.';
+    }
+
+    const confirmed = window.confirm(confirmMessage);
 
     if (!confirmed) {
       return;
     }
 
-    // Run all backups in parallel
-    enabledConfigs.forEach(config => {
+    // Run only non-encrypted backups in parallel
+    nonEncryptedConfigs.forEach(config => {
       handleRunBackup(config.id);
     });
   };
@@ -342,19 +372,48 @@ export function BackupList() {
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-gray-300">Saved Backups</h2>
-          {configs.length > 1 && (
-            <button
-              onClick={handleRunAllBackups}
-              disabled={runningBackups.size > 0}
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:cursor-not-allowed rounded text-xs font-medium transition-colors flex items-center gap-1.5"
-              title="Run all backups in parallel"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
-              </svg>
-              Run All Backups ({configs.length})
-            </button>
-          )}
+          {configs.length > 1 && (() => {
+            const enabledConfigs = configs.filter(c => c.enabled);
+            const nonEncryptedEnabled = enabledConfigs.filter(c => c.mode !== 'encrypted');
+            const encryptedEnabled = enabledConfigs.filter(c => c.mode === 'encrypted');
+
+            // Build honest button label
+            let buttonLabel = '';
+            let tooltipText = '';
+
+            if (encryptedEnabled.length === 0) {
+              // All enabled are non-encrypted
+              buttonLabel = `Run All Backups (${enabledConfigs.length})`;
+              tooltipText = 'Run all backups in parallel';
+            } else if (nonEncryptedEnabled.length === 0) {
+              // All enabled are encrypted
+              buttonLabel = `All Encrypted (${encryptedEnabled.length})`;
+              tooltipText = 'All enabled backups require individual passwords - click each to run';
+            } else {
+              // Mixed: some encrypted, some not
+              buttonLabel = `Run ${nonEncryptedEnabled.length} Backup${nonEncryptedEnabled.length > 1 ? 's' : ''}`;
+              tooltipText = `${encryptedEnabled.length} encrypted backup${encryptedEnabled.length > 1 ? 's' : ''} excluded - run manually`;
+            }
+
+            return (
+              <button
+                onClick={handleRunAllBackups}
+                disabled={runningBackups.size > 0}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:cursor-not-allowed rounded text-xs font-medium transition-colors flex items-center gap-1.5"
+                title={tooltipText}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+                </svg>
+                {buttonLabel}
+                {encryptedEnabled.length > 0 && nonEncryptedEnabled.length > 0 && (
+                  <span className="text-xs opacity-75">
+                    ({encryptedEnabled.length} encrypted excluded)
+                  </span>
+                )}
+              </button>
+            );
+          })()}
         </div>
         {configs.map((config: BackupConfig) => {
         const isRunning = runningBackups.has(config.id);

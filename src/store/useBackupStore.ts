@@ -63,8 +63,20 @@ export const useBackupStore = create<BackupStore>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       await invoke('save_config', { config });
-      // Reload configs to get updated state
-      await get().loadConfigs();
+
+      // Update config in-place without full reload to preserve UI state
+      // This prevents disrupting running backups when editing other configs
+      const currentConfigs = get().configs;
+      const updatedConfigs = currentConfigs.map(c =>
+        c.id === config.id ? config : c
+      );
+
+      // If config is new (not found in array), add it
+      if (!currentConfigs.find(c => c.id === config.id)) {
+        updatedConfigs.push(config);
+      }
+
+      set({ configs: updatedConfigs, isLoading: false });
     } catch (error) {
       set({ error: String(error), isLoading: false });
     }
