@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2025-11-07
+
+### Features
+
+- **ui:** simplify encrypted backup password workflow
+
+  - Remove duplicate password fields from configuration modal:
+  - Eliminate password and confirm password inputs
+  - Show clear information that password is prompted on execution only
+  - Improve security by never storing passwords in configurations
+  - Enhance user experience with simpler configuration flow
+  - Users now enter password once per backup execution instead of
+  - storing it in configuration, improving both security and UX.
+
 ## [0.5.4] - 2025-11-07
 
 ### Bug Fixes

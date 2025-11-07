@@ -13,8 +13,6 @@ export function BackupConfigModal({ config, onSave, onClose }: BackupConfigModal
   const [backupMode, setBackupMode] = useState<'copy' | 'compressed' | 'encrypted'>(
     config.mode || 'compressed'
   );
-  const [password, setPassword] = useState<string>('');
-  const [confirmPassword, setConfirmPassword] = useState<string>('');
   const [schedulePreset, setSchedulePreset] = useState<string>(
     config.schedule?.preset || 'none'
   );
@@ -85,22 +83,6 @@ export function BackupConfigModal({ config, onSave, onClose }: BackupConfigModal
   ];
 
   const handleSave = () => {
-    // Validate password for encrypted mode
-    if (backupMode === 'encrypted') {
-      if (!password) {
-        alert('Password is required for encrypted backups');
-        return;
-      }
-      if (password !== confirmPassword) {
-        alert('Passwords do not match');
-        return;
-      }
-      if (password.length < 8) {
-        alert('Password must be at least 8 characters');
-        return;
-      }
-    }
-
     const selectedPreset = schedulePresets.find((p) => p.value === schedulePreset);
     let cronExpression = schedulePreset === 'custom' ? customCron : selectedPreset?.cron || '';
 
@@ -128,7 +110,6 @@ export function BackupConfigModal({ config, onSave, onClose }: BackupConfigModal
       name: backupName.trim() || config.name, // Fallback to original if empty
       backup_type: backupType,
       mode: backupMode,
-      encryption_password: backupMode === 'encrypted' ? password : undefined,
       schedule: scheduleConfig,
       updated_at: Date.now(),
     };
@@ -249,38 +230,20 @@ export function BackupConfigModal({ config, onSave, onClose }: BackupConfigModal
             </div>
           </div>
 
-          {/* Password fields (only for encrypted mode) */}
+          {/* Encryption Mode Info */}
           {backupMode === 'encrypted' && (
-            <div className="space-y-3 bg-amber-900/10 border border-amber-800/30 rounded p-3">
-              <div>
-                <label className="block text-xs font-medium text-amber-300 mb-1.5">
-                  Encryption Password
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 focus:border-amber-600 focus:outline-none transition-colors"
-                  placeholder="Enter password (min. 8 characters)"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-amber-300 mb-1.5">
-                  Confirm Password
-                </label>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 focus:border-amber-600 focus:outline-none transition-colors"
-                  placeholder="Re-enter password"
-                />
-              </div>
-              <div className="flex items-start gap-2 text-xs text-amber-300/80">
+            <div className="bg-amber-900/10 border border-amber-800/30 rounded p-3">
+              <div className="flex items-start gap-2 text-xs text-amber-300">
                 <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span>Password is never saved. You'll need to enter it for each encrypted backup.</span>
+                <div>
+                  <div className="font-semibold mb-1">Encrypted Backup</div>
+                  <div className="opacity-90">
+                    You'll be prompted for a password each time you run this backup.
+                    Passwords are never saved for security reasons.
+                  </div>
+                </div>
               </div>
             </div>
           )}
