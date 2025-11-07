@@ -18,6 +18,7 @@ pub struct BackupProgress {
     pub details: Option<String>,
     pub current: Option<usize>,  // Files processed so far
     pub total: Option<usize>,     // Total files to process
+    pub started_at: Option<u64>,  // Unix timestamp when backup actually started (backend)
 }
 
 /// Backup a folder with support for 3 modes: Copy, Compressed, or Encrypted
@@ -42,6 +43,12 @@ pub fn compress_folder(
     password: Option<&str>,
     cancel_flag: Option<Arc<AtomicBool>>,
 ) -> Result<BackupJob, String> {
+    // Capture actual backend start time
+    let started_at = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
     // Helper to emit progress
     let emit_progress = |stage: &str, message: &str, details: Option<String>, current: Option<usize>, total: Option<usize>| {
         if let Some(app_handle) = app {
@@ -52,6 +59,7 @@ pub fn compress_folder(
                 details,
                 current,
                 total,
+                started_at: Some(started_at),
             });
         }
     };
@@ -272,9 +280,12 @@ pub fn compress_folder(
     } else {
         // Encrypted mode: Use streaming TAR + zstd + encryption
         log::info!("🗜️  Streaming TAR + zstd + encryption...");
-        emit_progress("compressing", "Compressing and encrypting", Some(format!("{} files", files_count)), Some(0), Some(files_count));
 
+        // CRITICAL: Validate password BEFORE emitting progress events
+        // This prevents UI from showing progress when backup will fail immediately
         let pwd = password.ok_or("Encryption enabled but no password provided")?;
+
+        emit_progress("compressing", "Compressing and encrypting", Some(format!("{} files", files_count)), Some(0), Some(files_count));
 
         // Create temporary file for compressed data (before encryption)
         let temp_compressed = backup_path.with_extension("tmp.zst");
@@ -745,7 +756,9 @@ fn calculate_checksum(file_path: &Path) -> Result<String, String> {
         .map_err(|e| format!("Failed to open file for checksum: {}", e))?;
 
     let mut context = Context::new(&SHA256);
-    let mut buffer = [0; 8192];
+    // Use 1MB buffer for faster checksum calculation on large files
+    // 8KB buffer was causing 20+ minute checksums on multi-GB backups
+    let mut buffer = vec![0u8; 1024 * 1024]; // 1MB buffer
 
     loop {
         let count = file
