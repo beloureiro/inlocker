@@ -71,16 +71,17 @@ This ensures your settings persist between app launches.
 
 ---
 
-## Coming Soon
+## Available Features
 
-The following features are currently in development:
-
-- ✅ **Manual backup execution** - Run backups on demand
-- 🔄 **Automatic scheduled backups** - Set it and forget it
-- 📦 **Compression** - Save disk space with zstd
-- 🔐 **Encryption** - Protect your data with AES-256
-- 📊 **Dashboard** - View backup history and statistics
-- ♻️ **Restore** - Recover files from backups
+- ✅ **Manual backup execution** - Run backups on demand with real-time progress
+- ✅ **Compression** - zstd compression (66%+ space savings)
+- ✅ **Encryption** - Optional AES-256-GCM protection (password prompt on execution)
+- ✅ **Restore** - Full restore with progress tracking
+- ✅ **Full & Incremental** - Choose backup type per configuration
+- ✅ **Parallel backups** - Run multiple backups simultaneously
+- ✅ **Run All** - Bulk execution (excludes encrypted configs, prompts individually)
+- 🔄 **Scheduled backups** - In-app scheduler (launchd integration pending)
+- ⏳ **Dashboard** - Coming soon
 
 ---
 

@@ -455,6 +455,12 @@ See detailed testing strategy in `docs/08-testing-strategy.md`
   - ✅ Collapsible technical info (doesn't distract user)
 - ✅ **Parallel backups UI**: FIXED - Added debounced loadConfigs() to prevent re-render issues, moved config reload to finally block (BackupList.tsx:29-36, 166)
 - ✅ **InLog system**: COMPLETE - Automatic changelog generation with git hooks (scripts/git/update-changelog.mjs, .husky/post-commit, CHANGELOG.md)
+- ✅ **Checksum optimization**: FIXED - Buffer increased from 8KB to 1MB (backup.rs:751-753), reduces 30GB checksum time from 25min to ~2min (12x faster)
+- ✅ **Password prompt timing**: FIXED - Validation before emit_progress (backup.rs:276-280), prevents progress bar on instant errors
+- ✅ **Timer accuracy**: FIXED - Backend timestamp sync (backup.rs:46-62, BackupList.tsx:56-66), frontend timer now matches actual processing time
+- ✅ **Config edit isolation**: FIXED - Zustand update in-place (useBackupStore.ts:67-79), editing one backup preserves running backup states
+- ✅ **Password UX**: SIMPLIFIED - Removed duplicate password input from config modal (BackupConfigModal.tsx), single prompt on execution only
+- ✅ **Run All button transparency**: FIXED - Honest labels and exclusion of encrypted backups (BackupList.tsx:138-180, 375-416), clear dialogs explain what will/won't run
 - ⏳ **Performance tests**: PENDING (4 tests implemented, optional long-duration tests available)
 - ⏳ **Dashboard**: PENDING (nice-to-have)
 
