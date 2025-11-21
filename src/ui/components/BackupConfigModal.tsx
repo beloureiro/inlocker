@@ -8,6 +8,29 @@ interface BackupConfigModalProps {
 }
 
 export function BackupConfigModal({ config, onSave, onClose }: BackupConfigModalProps) {
+  // Parse existing cron expression to initialize time/day values
+  const parseCronExpression = (cron: string) => {
+    const parts = cron.trim().split(/\s+/);
+    if (parts.length >= 5) {
+      return {
+        minute: parseInt(parts[0]) || 0,
+        hour: parseInt(parts[1]) || 14,
+        day: parts[2] !== '*' ? parseInt(parts[2]) : 1,
+        weekday: parts[4] !== '*' ? parseInt(parts[4]) : 0,
+      };
+    }
+    return { minute: 0, hour: 14, day: 1, weekday: 0 };
+  };
+
+  const existingCron = config.schedule?.cron_expression || '';
+  const parsedCron = parseCronExpression(existingCron);
+
+  // Log parsed values for debugging
+  console.log('📅 Configure Backup Modal Opened');
+  console.log('   Existing cron:', existingCron || '(none)');
+  console.log('   Parsed values:', parsedCron);
+  console.log('   Preset:', config.schedule?.preset || 'none');
+
   const [backupName, setBackupName] = useState<string>(config.name);
   const [backupType, setBackupType] = useState<'full' | 'incremental'>(config.backup_type);
   const [backupMode, setBackupMode] = useState<'copy' | 'compressed' | 'encrypted'>(
@@ -16,84 +39,42 @@ export function BackupConfigModal({ config, onSave, onClose }: BackupConfigModal
   const [schedulePreset, setSchedulePreset] = useState<string>(
     config.schedule?.preset || 'none'
   );
-  const [customCron, setCustomCron] = useState<string>(
-    config.schedule?.cron_expression || ''
-  );
 
-  const formatCronExpression = (value: string) => {
-    // Smart auto-format cron expression (called onBlur)
-    const cleanValue = value.replace(/\s+/g, '');
-
-    if (!cleanValue) {
-      return '';
-    }
-
-    // Check if it's purely numeric (like "2005" or "014")
-    const isNumericOnly = /^[0-9]+$/.test(cleanValue);
-
-    if (isNumericOnly && cleanValue.length >= 2) {
-      // Parse following CRON order (as shown in the tree):
-      // minute hour day month weekday
-      const parts: string[] = [];
-      let remaining = cleanValue;
-
-      // Extract MINUTE (0-59, max 2 digits)
-      let minute = '';
-      if (remaining.length >= 2 && parseInt(remaining.substring(0, 2)) <= 59) {
-        minute = remaining.substring(0, 2);
-        remaining = remaining.substring(2);
-      } else if (remaining.length >= 1) {
-        // Single digit minute
-        minute = remaining[0];
-        remaining = remaining.substring(1);
-      }
-
-      // Extract HOUR (0-23, max 2 digits)
-      let hour = '';
-      if (remaining.length >= 2 && parseInt(remaining.substring(0, 2)) <= 23) {
-        hour = remaining.substring(0, 2);
-        remaining = remaining.substring(2);
-      } else if (remaining.length >= 1 && parseInt(remaining[0]) <= 23) {
-        // Single digit hour
-        hour = remaining[0];
-        remaining = remaining.substring(1);
-      }
-
-      // If we got at least minute and hour, create valid cron
-      if (minute && hour) {
-        parts.push(minute, hour, '*', '*', '*');
-        return parts.join(' ');
-      }
-
-      // If only minute provided, keep original
-      return value;
-    }
-
-    // For non-numeric, return as-is
-    return value;
-  };
-
-  const schedulePresets = [
-    { value: 'none', label: 'Manual Only', cron: '' },
-    { value: 'hourly', label: 'Every Hour', cron: '0 * * * *' },
-    { value: 'daily', label: 'Daily at 2 PM', cron: '0 14 * * *' },
-    { value: 'weekly', label: 'Weekly (Sunday 2 PM)', cron: '0 14 * * 0' },
-    { value: 'monthly', label: 'Monthly (1st at 2 PM)', cron: '0 14 1 * *' },
-    { value: 'custom', label: 'Custom Schedule', cron: '' },
-  ];
+  // Simple time/day selectors initialized from existing config
+  const [hour, setHour] = useState<number>(parsedCron.hour);
+  const [minute, setMinute] = useState<number>(parsedCron.minute);
+  const [weekday, setWeekday] = useState<number>(parsedCron.weekday); // 0 = Sunday
+  const [monthday, setMonthday] = useState<number>(parsedCron.day); // 1-31
 
   const handleSave = () => {
-    const selectedPreset = schedulePresets.find((p) => p.value === schedulePreset);
-    let cronExpression = schedulePreset === 'custom' ? customCron : selectedPreset?.cron || '';
+    let cronExpression = '';
 
-    // Auto-fill custom cron with asterisks to ensure 5 fields
-    if (schedulePreset === 'custom' && cronExpression) {
-      const parts = cronExpression.trim().split(/\s+/);
-      while (parts.length < 5) {
-        parts.push('*');
-      }
-      cronExpression = parts.slice(0, 5).join(' ');
+    // Generate cron expression internally based on simple selections
+    switch (schedulePreset) {
+      case 'none':
+        cronExpression = '';
+        break;
+      case 'hourly':
+        cronExpression = '0 * * * *'; // Every hour at minute 0
+        break;
+      case 'daily':
+        cronExpression = `${minute} ${hour} * * *`; // Daily at specified time
+        break;
+      case 'weekly':
+        cronExpression = `${minute} ${hour} * * ${weekday}`; // Weekly on specified day/time
+        break;
+      case 'monthly':
+        cronExpression = `${minute} ${hour} ${monthday} * *`; // Monthly on specified day/time
+        break;
+      default:
+        cronExpression = '';
     }
+
+    console.log('💾 SAVING CONFIGURATION');
+    console.log('   Preset:', schedulePreset);
+    console.log('   Hour:', hour, '| Minute:', minute);
+    console.log('   Weekday:', weekday, '| Monthday:', monthday);
+    console.log('   Generated cron:', cronExpression || '(no schedule)');
 
     const scheduleConfig: ScheduleConfig | null =
       schedulePreset === 'none'
@@ -107,7 +88,7 @@ export function BackupConfigModal({ config, onSave, onClose }: BackupConfigModal
 
     const updatedConfig: BackupConfig = {
       ...config,
-      name: backupName.trim() || config.name, // Fallback to original if empty
+      name: backupName.trim() || config.name,
       backup_type: backupType,
       mode: backupMode,
       schedule: scheduleConfig,
@@ -265,71 +246,137 @@ export function BackupConfigModal({ config, onSave, onClose }: BackupConfigModal
                 paddingRight: '2.5rem',
               }}
             >
-              {schedulePresets.map((preset) => (
-                <option key={preset.value} value={preset.value}>
-                  {preset.label}
-                </option>
-              ))}
+              <option value="none">Manual Only</option>
+              <option value="hourly">Every Hour</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
             </select>
           </div>
 
-          {/* Custom Cron Expression */}
-          {schedulePreset === 'custom' && (
+          {/* Time Picker for Daily/Weekly/Monthly */}
+          {(schedulePreset === 'daily' || schedulePreset === 'weekly' || schedulePreset === 'monthly') && (
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Cron Expression
+                Time
               </label>
-              <input
-                type="text"
-                value={customCron}
-                onChange={(e) => setCustomCron(e.target.value)}
-                onBlur={(e) => setCustomCron(formatCronExpression(e.target.value))}
-                placeholder="Type: 0014 (min=00, hour=14) or 0 14 * * *"
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 placeholder-gray-500 focus:border-emerald-600 focus:outline-none transition-colors"
-              />
-              <div className="mt-2 p-2.5 bg-gray-900/50 border border-gray-700 rounded text-xs space-y-1.5">
-                <div className="text-gray-400">
-                  <strong>Format:</strong> minute hour day month weekday
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Hour (0-23)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    value={hour}
+                    onChange={(e) => setHour(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)))}
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 focus:border-emerald-600 focus:outline-none transition-colors"
+                  />
                 </div>
-                <pre className="text-gray-300 font-mono text-xs leading-snug overflow-x-auto">
-{`  0    14   *   *    *
-  │    │    │   │    └─ week (0-6, 0=Sun, *=any)
-  │    │    │   └────── month (1-12, *=any)
-  │    │    └────────── day (1-31, *=any)
-  │    └─────────────── hour (0-23, 14=2PM)
-  └──────────────────── minute (0-59)`}
-                </pre>
-                <div className="text-yellow-400 bg-yellow-900/20 border border-yellow-800/50 rounded px-2 py-1">
-                  <strong>*</strong> = "any" or "every" value
-                </div>
-                <div className="text-gray-400 space-y-0.5">
-                  <div className="font-semibold">Examples:</div>
-                  <div className="font-mono text-emerald-400">"0 14 * * *" <span className="text-gray-500">→ Daily 2PM</span></div>
-                  <div className="font-mono text-emerald-400">"30 9 * * 1" <span className="text-gray-500">→ Mon 9:30AM</span></div>
-                  <div className="font-mono text-emerald-400">"0 0 1 * *" <span className="text-gray-500">→ 1st/month midnight</span></div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Minute (0-59)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    value={minute}
+                    onChange={(e) => setMinute(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 focus:border-emerald-600 focus:outline-none transition-colors"
+                  />
                 </div>
               </div>
             </div>
           )}
 
-          {/* Schedule Info */}
-          {schedulePreset !== 'none' && schedulePreset !== 'custom' && (
-            <div className="bg-blue-900/20 border border-blue-800 rounded p-3">
-              <div className="flex items-start gap-2">
-                <svg className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div className="text-sm text-blue-300">
-                  <strong>Scheduled:</strong>{' '}
-                  {schedulePresets.find((p) => p.value === schedulePreset)?.label}
-                  <br />
-                  <span className="text-xs opacity-80">
-                    Cron: {schedulePresets.find((p) => p.value === schedulePreset)?.cron}
-                  </span>
-                </div>
-              </div>
+          {/* Day Picker for Weekly */}
+          {schedulePreset === 'weekly' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Day of Week
+              </label>
+              <select
+                value={weekday}
+                onChange={(e) => setWeekday(parseInt(e.target.value))}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 focus:border-emerald-600 focus:outline-none transition-colors"
+              >
+                <option value="0">Sunday</option>
+                <option value="1">Monday</option>
+                <option value="2">Tuesday</option>
+                <option value="3">Wednesday</option>
+                <option value="4">Thursday</option>
+                <option value="5">Friday</option>
+                <option value="6">Saturday</option>
+              </select>
             </div>
           )}
+
+          {/* Day Picker for Monthly */}
+          {schedulePreset === 'monthly' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Day of Month
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="31"
+                value={monthday}
+                onChange={(e) => setMonthday(Math.max(1, Math.min(31, parseInt(e.target.value) || 1)))}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 focus:border-emerald-600 focus:outline-none transition-colors"
+                placeholder="1-31"
+              />
+            </div>
+          )}
+
+          {/* Schedule Summary */}
+          {schedulePreset !== 'none' && (() => {
+            const now = new Date();
+            const currentHour = now.getHours();
+            const currentMinute = now.getMinutes();
+
+            let nextRunMessage = '';
+            let isTimePassed = false;
+
+            if (schedulePreset === 'hourly') {
+              nextRunMessage = 'Next run: Top of the next hour';
+            } else if (schedulePreset === 'daily') {
+              // Check if time has passed today
+              if (currentHour > hour || (currentHour === hour && currentMinute >= minute)) {
+                isTimePassed = true;
+                nextRunMessage = `Next run: Tomorrow at ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+              } else {
+                const minutesUntil = (hour - currentHour) * 60 + (minute - currentMinute);
+                const hoursUntil = Math.floor(minutesUntil / 60);
+                const minsUntil = minutesUntil % 60;
+                nextRunMessage = `Next run: Today at ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} (in ${hoursUntil}h ${minsUntil}m)`;
+              }
+            } else if (schedulePreset === 'weekly' || schedulePreset === 'monthly') {
+              nextRunMessage = `Next run: Check schedule logs`;
+            }
+
+            return (
+              <div className={`${isTimePassed ? 'bg-yellow-900/20 border-yellow-800' : 'bg-blue-900/20 border-blue-800'} border rounded p-3`}>
+                <div className="flex items-start gap-2">
+                  <svg className={`w-5 h-5 ${isTimePassed ? 'text-yellow-400' : 'text-blue-400'} flex-shrink-0 mt-0.5`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className={`text-sm ${isTimePassed ? 'text-yellow-300' : 'text-blue-300'}`}>
+                    <div><strong>Summary:</strong>{' '}
+                      {schedulePreset === 'hourly' && 'Runs every hour'}
+                      {schedulePreset === 'daily' && `Runs daily at ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`}
+                      {schedulePreset === 'weekly' && `Runs every ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][weekday]} at ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`}
+                      {schedulePreset === 'monthly' && `Runs on day ${monthday} of each month at ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`}
+                    </div>
+                    <div className="mt-1 text-xs opacity-90">{nextRunMessage}</div>
+                    {isTimePassed && (
+                      <div className="mt-2 text-xs opacity-75">
+                        Note: Time has passed today. Use "Test Now" button for immediate execution.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Actions */}

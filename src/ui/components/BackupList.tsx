@@ -114,22 +114,44 @@ export function BackupList() {
     // Register or unregister schedule based on config
     try {
       if (updatedConfig.schedule && updatedConfig.schedule.enabled) {
+        console.log('='.repeat(60));
+        console.log('🔧 REGISTERING SCHEDULE');
+        console.log('='.repeat(60));
+        console.log('Config ID:', updatedConfig.id);
+        console.log('Preset:', updatedConfig.schedule.preset);
+        console.log('Cron Expression:', updatedConfig.schedule.cron_expression);
+        console.log('Calling backend register_schedule...');
+
         // Register the schedule
         await invoke('register_schedule', { configId: updatedConfig.id });
-        console.log(`Schedule registered for config: ${updatedConfig.id}`);
+
+        console.log('✅ Schedule registered successfully!');
+        console.log('');
+        console.log('📋 AUTOMATIC VERIFICATION:');
+        console.log('   1. .plist created in ~/Library/LaunchAgents/');
+        console.log('   2. Agent loaded in launchd');
+        console.log('   3. Logs will be saved to ~/Library/Logs/InLocker/');
+        console.log('');
+        console.log('🔍 Manual verification commands:');
+        console.log('   ls -la ~/Library/LaunchAgents/com.inlocker*');
+        console.log('   launchctl list | grep inlocker');
+        console.log('='.repeat(60));
+
+        alert(`Schedule configured successfully!\n\nBackup: ${updatedConfig.name}\nFrequency: ${updatedConfig.schedule.preset}\n\nCheck console for technical details.`);
       } else {
         // Unregister the schedule if it was removed
         try {
+          console.log('🗑️ Unregistering schedule for config:', updatedConfig.id);
           await invoke('unregister_schedule', { configId: updatedConfig.id });
-          console.log(`Schedule unregistered for config: ${updatedConfig.id}`);
+          console.log(`✅ Schedule unregistered for config: ${updatedConfig.id}`);
         } catch (err) {
           // It's ok if there was no schedule to unregister
-          console.log(`No schedule to unregister for config: ${updatedConfig.id}`);
+          console.log(`ℹ️ No schedule to unregister for config: ${updatedConfig.id}`);
         }
       }
     } catch (error) {
-      console.error('Error managing schedule:', error);
-      alert(`Schedule error: ${error}`);
+      console.error('❌ ERROR managing schedule:', error);
+      alert(`Schedule error:\n\n${error}\n\nCheck console for details.`);
     }
 
     setEditingConfig(null);
@@ -528,10 +550,11 @@ export function BackupList() {
                         {config.schedule && (
                           <div className="flex items-baseline gap-2">
                             <span className="text-gray-400 text-xs whitespace-nowrap">Schedule:</span>
-                            <span className="text-gray-300 font-mono text-xs whitespace-nowrap">
-                              {config.schedule.preset && config.schedule.preset !== 'custom'
-                                ? config.schedule.preset.charAt(0).toUpperCase() + config.schedule.preset.slice(1)
-                                : config.schedule.cron_expression}
+                            <span className="text-gray-300 text-xs whitespace-nowrap">
+                              {config.schedule.preset === 'hourly' && 'Every hour'}
+                              {config.schedule.preset === 'daily' && 'Daily'}
+                              {config.schedule.preset === 'weekly' && 'Weekly'}
+                              {config.schedule.preset === 'monthly' && 'Monthly'}
                             </span>
                           </div>
                         )}
@@ -561,6 +584,46 @@ export function BackupList() {
                       </svg>
                       Settings
                     </button>
+
+                    {/* Schedule diagnostic buttons */}
+                    {config.schedule?.enabled && config.schedule?.cron_expression && (
+                      <>
+                        <button
+                          onClick={async () => {
+                            try {
+                              const message = await invoke<string>('test_schedule_now', { configId: config.id });
+                              alert(message);
+                            } catch (error) {
+                              alert(`Test failed: ${error}`);
+                            }
+                          }}
+                          className="px-3 py-1 text-xs text-blue-300 hover:text-blue-200 hover:bg-blue-900/20 rounded transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
+                          title="Test scheduled backup now"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+                          </svg>
+                          Test Now
+                        </button>
+                        <button
+                          onClick={async () => {
+                            try {
+                              await invoke('open_schedule_logs', { configId: config.id });
+                            } catch (error) {
+                              alert(`Failed to open logs: ${error}`);
+                            }
+                          }}
+                          className="px-3 py-1 text-xs text-gray-300 hover:text-white hover:bg-gray-800 rounded transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
+                          title="View schedule logs"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                          </svg>
+                          Logs
+                        </button>
+                      </>
+                    )}
+
                     <button
                       onClick={() => handleDelete(config.id)}
                       className="px-3 py-1 text-xs text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition-colors whitespace-nowrap"

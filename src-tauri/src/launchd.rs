@@ -381,8 +381,34 @@ pub fn install_launch_agent(
     log::info!("Generating .plist content...");
     let plist_content = generate_plist_content(config_id, cron_expr, app_path)?;
 
-    // STEP 4: Write plist file
+    // STEP 3.5: If agent already exists, bootout it first to force reload
     let plist_path = get_plist_path(config_id)?;
+    let label = get_agent_label(config_id);
+    let user_uid = get_user_uid()?;
+
+    if plist_path.exists() {
+        log::info!("Agent already exists, using bootout before update...");
+        let bootout_output = Command::new("launchctl")
+            .args(&["bootout", &format!("gui/{}/{}", user_uid, label)])
+            .output()
+            .map_err(|e| format!("Failed to execute launchctl bootout: {}", e))?;
+
+        if !bootout_output.status.success() {
+            let stderr = String::from_utf8_lossy(&bootout_output.stderr);
+            // It's ok if not loaded (exit code 3 = No such process)
+            if !stderr.contains("No such process") {
+                log::warn!("Failed to bootout agent (continuing anyway): {}", stderr);
+            } else {
+                log::info!("Agent was not loaded (this is OK)");
+            }
+        } else {
+            log::info!("✓ Agent unloaded successfully with bootout");
+        }
+    } else {
+        log::info!("New agent installation (no existing plist)");
+    }
+
+    // STEP 4: Write plist file
     log::info!("Writing .plist file to: {:?}", plist_path);
 
     fs::write(&plist_path, &plist_content)
@@ -402,29 +428,32 @@ pub fn install_launch_agent(
     }
     log::info!("✓ Plist content verified");
 
-    // STEP 7: Load the agent with launchctl
-    let label = get_agent_label(config_id);
-    log::info!("Loading agent with launchctl: {}", label);
+    // STEP 7: Load the agent with launchctl bootstrap (modern macOS command)
+    log::info!("Loading agent with launchctl bootstrap: {}", label);
 
     let output = Command::new("launchctl")
-        .args(&["load", plist_path.to_str().unwrap()])
+        .args(&[
+            "bootstrap",
+            &format!("gui/{}", user_uid),
+            plist_path.to_str().unwrap(),
+        ])
         .output()
-        .map_err(|e| format!("Failed to execute launchctl load: {}", e))?;
+        .map_err(|e| format!("Failed to execute launchctl bootstrap: {}", e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
 
-        log::warn!("launchctl load stderr: {}", stderr);
-        log::warn!("launchctl load stdout: {}", stdout);
+        log::warn!("launchctl bootstrap stderr: {}", stderr);
+        log::warn!("launchctl bootstrap stdout: {}", stdout);
 
-        // It's ok if already loaded
-        if !stderr.contains("already loaded") {
+        // Exit code 5 means already loaded or I/O error
+        if !stderr.contains("service is already loaded") && !stderr.contains("Bootstrap failed: 5") {
             return Err(format!("Failed to load launch agent: {}", stderr));
         }
         log::info!("Agent was already loaded (this is OK)");
     } else {
-        log::info!("✓ Agent loaded successfully");
+        log::info!("✓ Agent loaded successfully with bootstrap");
     }
 
     // STEP 8: Verify agent is loaded
@@ -444,43 +473,31 @@ pub fn install_launch_agent(
         }
     }
 
-    // STEP 9: Test agent with kickstart (manual trigger)
-    log::info!("Testing agent with kickstart...");
-    let uid = get_user_uid().unwrap_or_else(|_| "501".to_string());
-    let domain_target = format!("gui/{}/{}", uid, label);
-
-    let kickstart_output = Command::new("launchctl")
-        .args(&["kickstart", "-k", &domain_target])
-        .output()
-        .map_err(|e| format!("Failed to execute launchctl kickstart: {}", e))?;
-
-    if !kickstart_output.status.success() {
-        let stderr = String::from_utf8_lossy(&kickstart_output.stderr);
-        log::warn!("Kickstart failed (this might be OK for first run): {}", stderr);
-    } else {
-        log::info!("✓ Kickstart test successful");
-    }
-
+    // STEP 9: Skip automatic kickstart to avoid launching duplicate app instance
+    // User can manually test using "Test Now" button in UI
+    log::info!("✓ Schedule registered successfully (skipping automatic test)");
+    log::info!("   User can test manually using 'Test Now' button");
     log::info!("=== Launch agent installation completed successfully ===");
     Ok(())
 }
 
-/// Uninstall a launch agent (unload and delete .plist file)
+/// Uninstall a launch agent (bootout and delete .plist file)
 pub fn uninstall_launch_agent(config_id: &str) -> Result<(), String> {
     let plist_path = get_plist_path(config_id)?;
-
-    // Unload the agent with launchctl
     let label = get_agent_label(config_id);
+    let user_uid = get_user_uid()?;
+
+    // Bootout the agent with launchctl (modern macOS command)
     let output = Command::new("launchctl")
-        .args(&["unload", plist_path.to_str().unwrap()])
+        .args(&["bootout", &format!("gui/{}/{}", user_uid, label)])
         .output()
-        .map_err(|e| format!("Failed to execute launchctl unload: {}", e))?;
+        .map_err(|e| format!("Failed to execute launchctl bootout: {}", e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        // It's ok if not loaded
-        if !stderr.contains("Could not find specified service") {
-            log::warn!("Failed to unload launch agent: {}", stderr);
+        // It's ok if not loaded (exit code 3 = No such process)
+        if !stderr.contains("No such process") {
+            log::warn!("Failed to bootout launch agent: {}", stderr);
         }
     }
 

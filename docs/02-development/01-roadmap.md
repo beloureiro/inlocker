@@ -96,7 +96,7 @@
 
 ---
 
-## phase 3: automation and security ❌ NOT COMPLETE - 2 CRITICAL FAILURES
+## phase 3: automation and security 🟡 IN PROGRESS - 1 CRITICAL ISSUE REMAINING
 
 ### scheduler (scheduling) - Core Feature ✅ COMPLETE
 - [x] Implement cron expression parser (tokio-cron-scheduler library) ✅
@@ -114,21 +114,21 @@
 - [x] UI integration for schedule management ✅
 - [x] Test automatic trigger at scheduled times ✅
 
-### ⚠️ CRITICAL: launchd integration (macOS) - Independent Scheduling ❌ NOT WORKING
-**Status:** Code implemented but NOT FUNCTIONAL - scheduled backups do NOT execute
-- [x] Generate .plist file for launchd (StartCalendarInterval format) ✅ CODE WRITTEN
-- [x] Create module to install/uninstall launch agents ✅ CODE WRITTEN
-- [x] Register daemon when user configures schedule ✅ CODE WRITTEN
-- [x] Update register_schedule to create .plist files ✅ CODE WRITTEN
-- [x] Add CLI args support (--backup <config_id>) ✅ CODE WRITTEN
-- [x] Parse cron expressions to macOS StartCalendarInterval ✅ CODE WRITTEN
-- [x] Load/unload agents with launchctl commands ✅ CODE WRITTEN
-- [x] Clean up .plist files when deleting backup config ✅ CODE WRITTEN
-- [ ] **CRITICAL BLOCKER**: Scheduled backups do NOT execute automatically
-  - Problem: launchd agents created but never trigger backups
-  - Status: Code written but system integration UNTESTED and NON-FUNCTIONAL
-  - Impact: Core feature (automation) completely broken
-  - **Blocks production**: App cannot be launched without working scheduled backups
+### launchd integration (macOS) - Independent Scheduling ⏸️ PENDING USER TESTING
+**Status:** Implementation complete, awaiting final user validation (2025-11-14)
+- [x] Generate .plist file for launchd (StartCalendarInterval format) ✅
+- [x] Create module to install/uninstall launch agents ✅
+- [x] Register daemon when user configures schedule ✅
+- [x] Update register_schedule to create .plist files ✅
+- [x] Add CLI args support (--backup <config_id>) ✅
+- [x] Parse cron expressions to macOS StartCalendarInterval ✅
+- [x] Clean up .plist files when deleting backup config ✅
+- [x] **FIX 2025-11-14**: Migrated to `launchctl bootstrap/bootout` (macOS 26 Tahoe) ✅
+- [x] **FIX 2025-11-14**: Created progress UI for scheduled backups (ScheduledBackupProgress.tsx) ✅
+- [x] **FIX 2025-11-14**: Added Tauri command `is_scheduled_mode()` for CLI detection ✅
+- [x] **FIX 2025-11-14**: Added progress events (initializing → scanning → compressing → completed) ✅
+- [ ] **USER TESTING**: Confirm scheduled backups execute automatically (manual test showed success)
+- [ ] **USER TESTING**: Validate progress UI displays correctly during scheduled execution
 - [ ] Handle system wake from sleep (future enhancement)
 - [ ] Retry logic for failed scheduled backups (future enhancement)
 
@@ -155,7 +155,7 @@
 - [x] Notify backup error ✅
 - [ ] Add sounds (optional - future enhancement)
 
-**Phase 3 Deliverable:** ❌ FAILED - Automatic backups NOT working + encryption only works manually
+**Phase 3 Deliverable:** ⏸️ PENDING USER TESTING - Scheduled backups implemented (bootstrap/bootout fix for macOS 26) + progress UI added. Encryption still manual-only.
 
 ---
 

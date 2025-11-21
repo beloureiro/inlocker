@@ -314,7 +314,7 @@ fn get_manifest_path(app: &AppHandle, config_id: &str) -> Result<PathBuf, String
 /// Register a scheduled backup
 #[tauri::command]
 pub async fn register_schedule(
-    app: AppHandle,
+    _app: AppHandle,
     state: State<'_, AppState>,
     scheduler_state: State<'_, SchedulerState>,
     config_id: String,
@@ -335,12 +335,11 @@ pub async fn register_schedule(
         .as_ref()
         .ok_or("No schedule configured for this backup")?;
 
-    // Register with in-app scheduler (tokio-cron-scheduler)
-    scheduler_state
-        .register_schedule(app.clone(), config.clone())
-        .await?;
+    // NOTE: In-app scheduler removed - using only launchd for system-level scheduling
+    // This provides independent scheduling that works even when the app is closed
+    let _ = scheduler_state; // Suppress unused warning
 
-    // Install launchd agent for independent scheduling
+    // Install launchd agent for system-level scheduling
     let cron_expr = &schedule.cron_expression;
 
     // Get app executable path (handles both dev and production)
@@ -349,7 +348,7 @@ pub async fn register_schedule(
     launchd::install_launch_agent(&config_id, cron_expr, &app_path)?;
 
     log::info!(
-        "Registered schedule for config {} (in-app + launchd)",
+        "Registered schedule for config {} (launchd)",
         config_id
     );
 
@@ -362,14 +361,13 @@ pub async fn unregister_schedule(
     scheduler_state: State<'_, SchedulerState>,
     config_id: String,
 ) -> Result<bool, String> {
-    // Unregister from in-app scheduler
-    scheduler_state.unregister_schedule(&config_id).await?;
+    let _ = scheduler_state; // Suppress unused warning
 
     // Uninstall launchd agent
     launchd::uninstall_launch_agent(&config_id)?;
 
     log::info!(
-        "Unregistered schedule for config {} (in-app + launchd)",
+        "Unregistered schedule for config {} (launchd)",
         config_id
     );
 
@@ -382,7 +380,11 @@ pub async fn check_schedule_status(
     scheduler_state: State<'_, SchedulerState>,
     config_id: String,
 ) -> Result<bool, String> {
-    Ok(scheduler_state.is_scheduled(&config_id).await)
+    let _ = scheduler_state; // Suppress unused warning
+
+    // Use launchd to check if agent is loaded
+    let is_loaded = launchd::is_agent_loaded(&config_id).unwrap_or(false);
+    Ok(is_loaded)
 }
 
 /// List available backups for a configuration
@@ -480,6 +482,69 @@ pub async fn cancel_restore(
         // No restore running with this backup_file_path
         Ok(false)
     }
+}
+
+/// Test a schedule now (manual kickstart)
+#[tauri::command]
+pub async fn test_schedule_now(config_id: String) -> Result<String, String> {
+    log::info!("Manual test requested for schedule: {}", config_id);
+
+    // Get label
+    let label = format!("com.inlocker.backup.{}", config_id);
+
+    // Get UID
+    let uid_output = std::process::Command::new("id")
+        .args(&["-u"])
+        .output()
+        .map_err(|e| format!("Failed to get UID: {}", e))?;
+
+    let uid = String::from_utf8_lossy(&uid_output.stdout).trim().to_string();
+    let domain_target = format!("gui/{}/{}", uid, label);
+
+    // Execute kickstart
+    let output = std::process::Command::new("launchctl")
+        .args(&["kickstart", "-k", &domain_target])
+        .output()
+        .map_err(|e| format!("Failed to execute kickstart: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Kickstart failed: {}", stderr));
+    }
+
+    log::info!("Schedule test executed successfully");
+    Ok(format!("Backup job triggered manually for {}", config_id))
+}
+
+/// Check if app is running in scheduled/CLI mode
+#[tauri::command]
+pub fn is_scheduled_mode() -> bool {
+    // Check if app was started with --backup argument
+    let args: Vec<String> = std::env::args().collect();
+    args.len() >= 3 && args[1] == "--backup"
+}
+
+/// Open the schedule logs directory in Finder
+#[tauri::command]
+pub async fn open_schedule_logs(config_id: String) -> Result<(), String> {
+    let log_path = launchd::get_log_path(&config_id)?;
+    let log_dir = log_path
+        .parent()
+        .ok_or("Failed to get logs directory")?;
+
+    // Open in Finder using 'open' command
+    let output = std::process::Command::new("open")
+        .arg(log_dir)
+        .output()
+        .map_err(|e| format!("Failed to open Finder: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to open logs: {}", stderr));
+    }
+
+    log::info!("Opened logs directory for config: {}", config_id);
+    Ok(())
 }
 
 /// Diagnose scheduling system for a configuration
