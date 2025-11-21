@@ -9,9 +9,22 @@
     "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
   },
+  "plugins": {
+    "cli": {
+      "description": "InLocker backup automation tool",
+      "args": [
+        {
+          "name": "backup",
+          "takesValue": true,
+          "description": "Run scheduled backup for config ID"
+        }
+      ]
+    }
+  },
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "InLocker",
         "width": 1400,
         "height": 900,
@@ -20,7 +33,21 @@
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "theme": "Dark",
-        "devtools": true
+        "devtools": true,
+        "visible": false
+      },
+      {
+        "label": "scheduled-progress",
+        "title": "Backup Agendado - InLocker",
+        "width": 600,
+        "height": 450,
+        "center": true,
+        "resizable": false,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "theme": "Light",
+        "devtools": false,
+        "visible": false
       }
     ],
     "security": {

@@ -134,3 +134,21 @@ pub struct FileMetadata {
     pub modified_at: i64,
     pub checksum: String,
 }
+
+/// Diagnostics for a scheduled backup
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScheduleDiagnostics {
+    pub config_id: String,
+    pub has_schedule: bool,
+    pub plist_exists: bool,
+    pub plist_path: Option<String>,
+    pub agent_loaded: bool,
+    pub agent_label: Option<String>,
+    pub executable_path: Option<String>,
+    pub executable_exists: bool,
+    pub logs_path: Option<String>,
+    pub logs_exist: bool,
+    pub next_execution: Option<String>,
+    pub errors: Vec<String>,
+    pub warnings: Vec<String>,
+}

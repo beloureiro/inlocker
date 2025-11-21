@@ -1,17 +1,43 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Layout } from './ui/components/Layout';
 import { FolderSelector } from './ui/components/FolderSelector';
 import { RestoreSelector } from './ui/components/RestoreSelector';
 import { BackupList } from './ui/components/BackupList';
+import ScheduledBackupProgress from './ui/components/ScheduledBackupProgress';
 import { useBackupStore, BackupConfig } from './store/useBackupStore';
 
 function App() {
   const { loadConfigs, saveConfig, isLoading, error } = useBackupStore();
+  const [isScheduledMode, setIsScheduledMode] = useState<boolean | null>(null);
 
-  // Load configs on mount
+  // Detect if running in scheduled/CLI mode
   useEffect(() => {
-    loadConfigs();
-  }, [loadConfigs]);
+    // Use official Tauri CLI plugin to detect --backup argument
+    import('@tauri-apps/plugin-cli').then(({ getMatches }) => {
+      getMatches()
+        .then((matches) => {
+          // Check if --backup argument was provided
+          const backupArg = matches.args.backup;
+          const isScheduled = backupArg && backupArg.value !== null;
+          setIsScheduledMode(isScheduled);
+
+          if (isScheduled) {
+            console.log('Running in scheduled mode for backup:', backupArg.value);
+          }
+        })
+        .catch((error) => {
+          console.error('Failed to get CLI matches:', error);
+          setIsScheduledMode(false);
+        });
+    });
+  }, []);
+
+  // Load configs on mount (only in normal mode)
+  useEffect(() => {
+    if (isScheduledMode === false) {
+      loadConfigs();
+    }
+  }, [loadConfigs, isScheduledMode]);
 
   const handleFolderSelected = async (
     sourcePath: string,
@@ -43,6 +69,24 @@ function App() {
     await saveConfig(newConfig);
   };
 
+  // Show loading while detecting mode
+  if (isScheduledMode === null) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-700 text-lg">Iniciando InLocker...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show progress UI for scheduled backups
+  if (isScheduledMode === true) {
+    return <ScheduledBackupProgress />;
+  }
+
+  // Normal app UI
   return (
     <Layout>
       <div className="max-w-4xl mx-auto space-y-8">

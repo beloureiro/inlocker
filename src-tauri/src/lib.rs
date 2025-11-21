@@ -8,6 +8,7 @@ pub mod types;
 use commands::AppState;
 use scheduler::SchedulerState;
 use types::BackupConfig;
+use tauri::{Emitter, Manager};
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -24,18 +25,54 @@ pub fn run() {
 
     log::info!("InLocker starting...");
 
-    // Initialize scheduler (blocking)
-    let scheduler_state = tokio::runtime::Runtime::new()
-        .expect("Failed to create tokio runtime")
-        .block_on(async {
-            let state = SchedulerState::new()
-                .await
-                .expect("Failed to create scheduler");
-            state.start().await.expect("Failed to start scheduler");
-            state
-        });
+    // Check for CLI mode BEFORE initializing GUI
+    let args: Vec<String> = std::env::args().collect();
+    log::info!("App started with args: {:?}", args);
+
+    // Detect CLI mode for scheduled backup
+    let cli_backup_config_id = if args.len() >= 3 && args[1] == "--backup" {
+        Some(args[2].clone())
+    } else {
+        None
+    };
+
+    if let Some(ref config_id) = cli_backup_config_id {
+        log::info!("Running in CLI mode for scheduled backup: {}", config_id);
+    }
+
+    // Normal GUI mode: Initialize scheduler (skip for CLI mode)
+    let scheduler_state = if cli_backup_config_id.is_none() {
+        tokio::runtime::Runtime::new()
+            .expect("Failed to create tokio runtime")
+            .block_on(async {
+                let state = SchedulerState::new()
+                    .await
+                    .expect("Failed to create scheduler");
+                state.start().await.expect("Failed to start scheduler");
+                state
+            })
+    } else {
+        // CLI mode: create minimal scheduler state
+        tokio::runtime::Runtime::new()
+            .expect("Failed to create tokio runtime")
+            .block_on(async {
+                SchedulerState::new()
+                    .await
+                    .expect("Failed to create scheduler")
+            })
+    };
 
     tauri::Builder::default()
+        // IMPORTANTE: single-instance DEVE ser o PRIMEIRO plugin (ordem importa!)
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            // Se usuário tentar abrir segunda instância, foca janela principal existente
+            log::info!("Single instance detected, focusing existing main window");
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_focus();
+                let _ = window.unminimize();
+            }
+        }))
+        .plugin(tauri_plugin_cli::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
@@ -54,41 +91,56 @@ pub fn run() {
             commands::register_schedule,
             commands::unregister_schedule,
             commands::check_schedule_status,
+            commands::diagnose_schedule,
+            commands::test_schedule_now,
+            commands::is_scheduled_mode,
+            commands::open_schedule_logs,
             commands::list_available_backups,
             commands::restore_backup,
         ])
-        .setup(|app| {
-            // Check for CLI arguments (--backup <config_id>)
-            let args: Vec<String> = std::env::args().collect();
-            log::info!("App started with args: {:?}", args);
+        .setup(move |app| {
+            let app_handle = app.handle().clone();
 
-            // If launched with --backup argument, run backup and exit
-            if args.len() >= 3 && args[1] == "--backup" {
-                let config_id = args[2].clone();
-                log::info!("Running scheduled backup for config: {}", config_id);
+            // CLI mode: run backup with progress UI
+            if let Some(config_id) = cli_backup_config_id {
+                // Show SCHEDULED PROGRESS window (NOT main window)
+                if let Some(window) = app.get_webview_window("scheduled-progress") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                    log::info!("Opened scheduled-progress window for backup: {}", config_id);
+                } else {
+                    log::error!("Failed to get scheduled-progress window!");
+                }
 
-                let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    if let Err(e) = run_scheduled_backup(&app_handle, &config_id).await {
-                        log::error!("Scheduled backup failed: {}", e);
-                        std::process::exit(1);
-                    } else {
-                        log::info!("Scheduled backup completed successfully");
-                        std::process::exit(0);
+                    log::info!("Executing scheduled backup for config: {}", config_id);
+                    match run_scheduled_backup(&app_handle, &config_id).await {
+                        Ok(_) => {
+                            log::info!("Scheduled backup completed successfully");
+                            std::process::exit(0);
+                        }
+                        Err(e) => {
+                            log::error!("Scheduled backup failed: {}", e);
+                            std::process::exit(1);
+                        }
                     }
                 });
+            } else {
+                // Normal app startup - Show MAIN window and re-register schedules
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    log::info!("Opened main window for normal app usage");
+                } else {
+                    log::error!("Failed to get main window!");
+                }
 
-                // Keep app running until backup completes
-                return Ok(());
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = restore_schedules(app_handle).await {
+                        log::error!("Failed to restore schedules: {}", e);
+                    }
+                });
             }
 
-            // Normal app startup - Re-register all schedules
-            let app_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(e) = restore_schedules(app_handle).await {
-                    log::error!("Failed to restore schedules: {}", e);
-                }
-            });
             Ok(())
         })
         .run(tauri::generate_context!())
@@ -122,12 +174,26 @@ async fn run_scheduled_backup(app: &tauri::AppHandle, config_id: &str) -> Result
 
     log::info!("Running backup for: {}", config.name);
 
+    // Emit progress event: Initializing
+    let _ = app.emit("backup-progress", serde_json::json!({
+        "stage": "initializing",
+        "message": format!("Inicializando backup: {}", config.name),
+        "percentage": 0
+    }));
+
     // Send notification: Backup started
     send_notification(
         app,
         "InLocker - Backup Started",
         &format!("Starting backup: {}", config.name),
     );
+
+    // Emit progress event: Scanning
+    let _ = app.emit("backup-progress", serde_json::json!({
+        "stage": "scanning",
+        "message": "Escaneando arquivos...",
+        "percentage": 10
+    }));
 
     // Execute backup using the backup module directly
     use crate::backup;
@@ -151,6 +217,13 @@ async fn run_scheduled_backup(app: &tauri::AppHandle, config_id: &str) -> Result
         None
     };
 
+    // Emit progress event: Compressing
+    let _ = app.emit("backup-progress", serde_json::json!({
+        "stage": "compressing",
+        "message": "Comprimindo arquivos...",
+        "percentage": 30
+    }));
+
     // Perform backup
     // TODO: Add password parameter when CLI supports it
     match backup::compress_folder(
@@ -165,6 +238,12 @@ async fn run_scheduled_backup(app: &tauri::AppHandle, config_id: &str) -> Result
         None, // No cancellation support for scheduled backups
     ) {
         Ok(job) => {
+            // Emit progress event: Finalizing
+            let _ = app.emit("backup-progress", serde_json::json!({
+                "stage": "finalizing",
+                "message": "Finalizando backup...",
+                "percentage": 90
+            }));
             log::info!("Backup completed: {} files, {} bytes",
                 job.files_count.unwrap_or(0),
                 job.compressed_size.unwrap_or(0)
@@ -182,6 +261,16 @@ async fn run_scheduled_backup(app: &tauri::AppHandle, config_id: &str) -> Result
             // Send success notification
             let files_count = job.files_count.unwrap_or(0);
             let size_mb = job.compressed_size.unwrap_or(0) as f64 / 1_048_576.0;
+
+            // Emit progress event: Completed
+            let _ = app.emit("backup-progress", serde_json::json!({
+                "stage": "completed",
+                "message": format!("Backup concluído! {} arquivos ({:.1} MB)", files_count, size_mb),
+                "percentage": 100,
+                "files_processed": files_count,
+                "total_files": files_count
+            }));
+
             send_notification(
                 app,
                 "InLocker - Backup Completed ✓",

@@ -5,6 +5,28 @@ use std::process::Command;
 /// macOS launchd integration for independent backup scheduling
 /// Creates and manages .plist files in ~/Library/LaunchAgents
 
+/// Get the correct executable path (handles both dev and production mode)
+pub fn get_executable_path() -> Result<String, String> {
+    let current = std::env::current_exe()
+        .map_err(|e| format!("Failed to get current exe: {}", e))?;
+
+    let path_str = current.to_str().ok_or("Invalid UTF-8 in exe path")?;
+
+    log::info!("Current executable path: {}", path_str);
+
+    // Check if running from bundle (production)
+    if path_str.contains(".app/Contents/MacOS") {
+        // Production: use bundle path
+        let bundle_path = "/Applications/InLocker.app/Contents/MacOS/inlocker";
+        log::info!("Detected production mode, using bundle path: {}", bundle_path);
+        return Ok(bundle_path.to_string());
+    }
+
+    // Dev mode: use current executable
+    log::info!("Detected dev mode, using current path: {}", path_str);
+    Ok(path_str.to_string())
+}
+
 /// Get the path to LaunchAgents directory
 fn get_launch_agents_dir() -> Result<PathBuf, String> {
     let home = std::env::var("HOME").map_err(|e| format!("Failed to get HOME: {}", e))?;
@@ -12,7 +34,7 @@ fn get_launch_agents_dir() -> Result<PathBuf, String> {
 }
 
 /// Get the .plist file path for a backup config
-fn get_plist_path(config_id: &str) -> Result<PathBuf, String> {
+pub fn get_plist_path(config_id: &str) -> Result<PathBuf, String> {
     let dir = get_launch_agents_dir()?;
     Ok(dir.join(format!("com.inlocker.backup.{}.plist", config_id)))
 }
@@ -20,6 +42,65 @@ fn get_plist_path(config_id: &str) -> Result<PathBuf, String> {
 /// Get the label for a launch agent
 fn get_agent_label(config_id: &str) -> String {
     format!("com.inlocker.backup.{}", config_id)
+}
+
+/// Get current user's UID
+fn get_user_uid() -> Result<String, String> {
+    let output = Command::new("id")
+        .args(&["-u"])
+        .output()
+        .map_err(|e| format!("Failed to execute id command: {}", e))?;
+
+    if !output.status.success() {
+        return Err("Failed to get user UID".to_string());
+    }
+
+    let uid = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(uid)
+}
+
+/// Get logs directory path
+pub fn get_logs_dir() -> Result<PathBuf, String> {
+    let home = std::env::var("HOME").map_err(|e| format!("Failed to get HOME: {}", e))?;
+    let logs_dir = PathBuf::from(home).join("Library/Logs/InLocker");
+
+    // Create directory if it doesn't exist
+    if !logs_dir.exists() {
+        fs::create_dir_all(&logs_dir)
+            .map_err(|e| format!("Failed to create logs directory: {}", e))?;
+        log::info!("Created logs directory: {:?}", logs_dir);
+    }
+
+    Ok(logs_dir)
+}
+
+/// Get log file path for a config
+pub fn get_log_path(config_id: &str) -> Result<PathBuf, String> {
+    let logs_dir = get_logs_dir()?;
+    Ok(logs_dir.join(format!("scheduled-{}.log", config_id)))
+}
+
+/// Get error log file path for a config
+pub fn get_error_log_path(config_id: &str) -> Result<PathBuf, String> {
+    let logs_dir = get_logs_dir()?;
+    Ok(logs_dir.join(format!("scheduled-{}.err", config_id)))
+}
+
+/// Check if a launch agent is loaded in launchd
+pub fn is_agent_loaded(config_id: &str) -> Result<bool, String> {
+    let label = get_agent_label(config_id);
+
+    let output = Command::new("launchctl")
+        .args(&["list"])
+        .output()
+        .map_err(|e| format!("Failed to execute launchctl list: {}", e))?;
+
+    if !output.status.success() {
+        return Err("Failed to list launch agents".to_string());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(stdout.contains(&label))
 }
 
 /// Parse cron expression and convert to launchd StartCalendarInterval
@@ -247,48 +328,84 @@ pub fn generate_plist_content(
         plist.push_str("  </array>\n");
     }
 
+    // Get persistent log paths
+    let log_path = get_log_path(config_id)?;
+    let err_log_path = get_error_log_path(config_id)?;
+
     plist.push_str(&format!(
         r#"
   <key>RunAtLoad</key>
   <false/>
 
   <key>StandardOutPath</key>
-  <string>/tmp/inlocker-{}.log</string>
+  <string>{}</string>
 
   <key>StandardErrorPath</key>
-  <string>/tmp/inlocker-{}.err</string>
+  <string>{}</string>
 </dict>
 </plist>
 "#,
-        config_id, config_id
+        log_path.to_string_lossy(),
+        err_log_path.to_string_lossy()
     ));
 
     Ok(plist)
 }
 
 /// Install a launch agent (write .plist file and load it)
+/// with robust verification
 pub fn install_launch_agent(
     config_id: &str,
     cron_expr: &str,
     app_path: &str,
 ) -> Result<(), String> {
-    // Ensure LaunchAgents directory exists
-    let dir = get_launch_agents_dir()?;
-    fs::create_dir_all(&dir)
-        .map_err(|e| format!("Failed to create LaunchAgents directory: {}", e))?;
+    log::info!("=== Installing launch agent for config: {} ===", config_id);
+    log::info!("Cron expression: {}", cron_expr);
+    log::info!("Executable path: {}", app_path);
 
-    // Generate plist content
+    // STEP 1: Ensure LaunchAgents directory exists
+    let dir = get_launch_agents_dir()?;
+    log::info!("LaunchAgents directory: {:?}", dir);
+
+    if !dir.exists() {
+        log::info!("Creating LaunchAgents directory...");
+        fs::create_dir_all(&dir)
+            .map_err(|e| format!("Failed to create LaunchAgents directory: {}", e))?;
+    }
+
+    // STEP 2: Ensure logs directory exists
+    let logs_dir = get_logs_dir()?;
+    log::info!("Logs directory: {:?}", logs_dir);
+
+    // STEP 3: Generate plist content
+    log::info!("Generating .plist content...");
     let plist_content = generate_plist_content(config_id, cron_expr, app_path)?;
 
-    // Write plist file
+    // STEP 4: Write plist file
     let plist_path = get_plist_path(config_id)?;
-    fs::write(&plist_path, plist_content)
+    log::info!("Writing .plist file to: {:?}", plist_path);
+
+    fs::write(&plist_path, &plist_content)
         .map_err(|e| format!("Failed to write plist file: {}", e))?;
 
-    log::info!("Created plist file: {:?}", plist_path);
+    // STEP 5: Verify plist file was created
+    if !plist_path.exists() {
+        return Err(format!("Plist file was not created: {:?}", plist_path));
+    }
+    log::info!("✓ Plist file created successfully");
 
-    // Load the agent with launchctl
+    // STEP 6: Verify plist content
+    let written_content = fs::read_to_string(&plist_path)
+        .map_err(|e| format!("Failed to read plist file: {}", e))?;
+    if written_content != plist_content {
+        return Err("Plist file content mismatch after write".to_string());
+    }
+    log::info!("✓ Plist content verified");
+
+    // STEP 7: Load the agent with launchctl
     let label = get_agent_label(config_id);
+    log::info!("Loading agent with launchctl: {}", label);
+
     let output = Command::new("launchctl")
         .args(&["load", plist_path.to_str().unwrap()])
         .output()
@@ -296,13 +413,55 @@ pub fn install_launch_agent(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        log::warn!("launchctl load stderr: {}", stderr);
+        log::warn!("launchctl load stdout: {}", stdout);
+
         // It's ok if already loaded
         if !stderr.contains("already loaded") {
             return Err(format!("Failed to load launch agent: {}", stderr));
         }
+        log::info!("Agent was already loaded (this is OK)");
+    } else {
+        log::info!("✓ Agent loaded successfully");
     }
 
-    log::info!("Loaded launch agent: {}", label);
+    // STEP 8: Verify agent is loaded
+    log::info!("Verifying agent is loaded...");
+    match is_agent_loaded(config_id) {
+        Ok(true) => {
+            log::info!("✓ Agent verified in launchctl list");
+        }
+        Ok(false) => {
+            return Err(format!(
+                "Agent loaded but not visible in launchctl list: {}",
+                label
+            ));
+        }
+        Err(e) => {
+            log::warn!("Could not verify agent status: {}", e);
+        }
+    }
+
+    // STEP 9: Test agent with kickstart (manual trigger)
+    log::info!("Testing agent with kickstart...");
+    let uid = get_user_uid().unwrap_or_else(|_| "501".to_string());
+    let domain_target = format!("gui/{}/{}", uid, label);
+
+    let kickstart_output = Command::new("launchctl")
+        .args(&["kickstart", "-k", &domain_target])
+        .output()
+        .map_err(|e| format!("Failed to execute launchctl kickstart: {}", e))?;
+
+    if !kickstart_output.status.success() {
+        let stderr = String::from_utf8_lossy(&kickstart_output.stderr);
+        log::warn!("Kickstart failed (this might be OK for first run): {}", stderr);
+    } else {
+        log::info!("✓ Kickstart test successful");
+    }
+
+    log::info!("=== Launch agent installation completed successfully ===");
     Ok(())
 }
 

@@ -1,7 +1,7 @@
 use crate::backup;
 use crate::launchd;
 use crate::scheduler::SchedulerState;
-use crate::types::{BackupConfig, BackupManifest, BackupResult, BackupType};
+use crate::types::{BackupConfig, BackupManifest, BackupResult, BackupType, ScheduleDiagnostics};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -343,11 +343,8 @@ pub async fn register_schedule(
     // Install launchd agent for independent scheduling
     let cron_expr = &schedule.cron_expression;
 
-    // Get app executable path
-    let app_path = std::env::current_exe()
-        .map_err(|e| format!("Failed to get app path: {}", e))?
-        .to_string_lossy()
-        .to_string();
+    // Get app executable path (handles both dev and production)
+    let app_path = launchd::get_executable_path()?;
 
     launchd::install_launch_agent(&config_id, cron_expr, &app_path)?;
 
@@ -483,4 +480,122 @@ pub async fn cancel_restore(
         // No restore running with this backup_file_path
         Ok(false)
     }
+}
+
+/// Diagnose scheduling system for a configuration
+#[tauri::command]
+pub async fn diagnose_schedule(
+    state: State<'_, AppState>,
+    config_id: String,
+) -> Result<ScheduleDiagnostics, String> {
+    log::info!("=== Diagnosing schedule for config: {} ===", config_id);
+
+    let mut errors = Vec::new();
+    let mut warnings = Vec::new();
+
+    // Get config
+    let config = {
+        let configs = state.configs.lock().map_err(|e| e.to_string())?;
+        configs
+            .iter()
+            .find(|c| c.id == config_id)
+            .ok_or("Config not found")?
+            .clone()
+    };
+
+    let has_schedule = config.schedule.is_some();
+
+    // Check plist file
+    let plist_path = match launchd::get_plist_path(&config_id) {
+        Ok(path) => Some(path),
+        Err(e) => {
+            errors.push(format!("Failed to get plist path: {}", e));
+            None
+        }
+    };
+
+    let plist_exists = plist_path.as_ref().map(|p| p.exists()).unwrap_or(false);
+
+    if !plist_exists && has_schedule {
+        errors.push("Schedule configured but plist file not found".to_string());
+    }
+
+    // Check if agent is loaded
+    let agent_loaded = match launchd::is_agent_loaded(&config_id) {
+        Ok(loaded) => {
+            if !loaded && has_schedule {
+                errors.push("Agent not loaded in launchctl".to_string());
+            }
+            loaded
+        }
+        Err(e) => {
+            errors.push(format!("Failed to check agent status: {}", e));
+            false
+        }
+    };
+
+    let agent_label = if has_schedule {
+        Some(format!("com.inlocker.backup.{}", config_id))
+    } else {
+        None
+    };
+
+    // Check executable path
+    let executable_path = match launchd::get_executable_path() {
+        Ok(path) => Some(path),
+        Err(e) => {
+            errors.push(format!("Failed to get executable path: {}", e));
+            None
+        }
+    };
+
+    let executable_exists = executable_path
+        .as_ref()
+        .map(|p| PathBuf::from(p).exists())
+        .unwrap_or(false);
+
+    if !executable_exists {
+        errors.push("Executable not found at expected path".to_string());
+    }
+
+    // Check logs
+    let logs_path = match launchd::get_log_path(&config_id) {
+        Ok(path) => Some(path.to_string_lossy().to_string()),
+        Err(e) => {
+            warnings.push(format!("Failed to get log path: {}", e));
+            None
+        }
+    };
+
+    let logs_exist = logs_path.as_ref().map(|p| PathBuf::from(p).exists()).unwrap_or(false);
+
+    // Next execution (simplified for now)
+    let next_execution = config
+        .schedule
+        .as_ref()
+        .and_then(|s| s.next_run)
+        .map(|ts| {
+            let datetime = chrono::DateTime::from_timestamp(ts, 0)
+                .unwrap_or_else(|| chrono::Utc::now().into());
+            datetime.format("%Y-%m-%d %H:%M:%S").to_string()
+        });
+
+    let diagnostics = ScheduleDiagnostics {
+        config_id: config_id.clone(),
+        has_schedule,
+        plist_exists,
+        plist_path: plist_path.map(|p| p.to_string_lossy().to_string()),
+        agent_loaded,
+        agent_label,
+        executable_path,
+        executable_exists,
+        logs_path,
+        logs_exist,
+        next_execution,
+        errors,
+        warnings,
+    };
+
+    log::info!("Diagnostics results: {:?}", diagnostics);
+    Ok(diagnostics)
 }
