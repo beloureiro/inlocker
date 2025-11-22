@@ -46,7 +46,6 @@
         "resizable": false,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "theme": "Light",
         "devtools": true,
         "visible": false
       }

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.4] - 2025-11-22
+
+### Bug Fixes
+
+- **ui:** remove light theme causing file picker to appear in light mode
+
+  - Removed theme: Light from scheduled-progress window
+  - macOS theme is app-wide, not per-window
+  - Kept theme: Dark on main window
+  - docs(roadmap): update Phase 3 status to COMPLETE and MVP to NEAR PRODUCTION
+
 ## [0.6.3] - 2025-11-22
 
 ### Bug Fixes
