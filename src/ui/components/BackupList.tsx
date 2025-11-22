@@ -25,6 +25,7 @@ export function BackupList() {
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [passwordPrompt, setPasswordPrompt] = useState<{ configId: string; show: boolean }>({ configId: '', show: false });
   const [passwordInput, setPasswordInput] = useState('');
+  const [backupFileExists, setBackupFileExists] = useState<Map<string, boolean>>(new Map());
 
   // Debounce loadConfigs to avoid multiple re-renders during parallel backups
   const loadConfigsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -92,6 +93,29 @@ export function BackupList() {
 
     return () => clearInterval(interval);
   }, [runningBackups, backupStartTimes]);
+
+  // Verify backup file existence when configs change
+  useEffect(() => {
+    const verifyBackups = async () => {
+      const existenceMap = new Map<string, boolean>();
+
+      for (const config of configs) {
+        if (config.last_backup_at) {
+          try {
+            const exists = await invoke<boolean>('verify_backup_exists', { configId: config.id });
+            existenceMap.set(config.id, exists);
+          } catch (error) {
+            console.error(`Failed to verify backup for ${config.id}:`, error);
+            existenceMap.set(config.id, false);
+          }
+        }
+      }
+
+      setBackupFileExists(existenceMap);
+    };
+
+    verifyBackups();
+  }, [configs]);
 
   if (configs.length === 0) {
     return (
@@ -514,7 +538,7 @@ export function BackupList() {
                       {/* Grid layout for stats - 2x2 grid */}
                       <div className="grid grid-cols-2 gap-x-8 gap-y-1 pt-1">
                         {/* Row 1, Col 1 */}
-                        {config.last_backup_at && (
+                        {config.last_backup_at && backupFileExists.get(config.id) === true && (
                           <div className="flex items-baseline gap-2">
                             <span className="text-gray-400 text-xs whitespace-nowrap">Last:</span>
                             <span className="text-gray-300 text-xs whitespace-nowrap">
@@ -524,7 +548,7 @@ export function BackupList() {
                         )}
 
                         {/* Row 1, Col 2 */}
-                        {config.last_backup_original_size && config.last_backup_compressed_size && (
+                        {config.last_backup_original_size && config.last_backup_compressed_size && backupFileExists.get(config.id) === true && (
                           <div className="flex items-baseline gap-2">
                             <span className="text-gray-400 text-xs whitespace-nowrap">Size:</span>
                             <span className="text-gray-300 font-mono text-xs whitespace-nowrap">
@@ -537,7 +561,7 @@ export function BackupList() {
                         )}
 
                         {/* Row 2, Col 1 */}
-                        {config.last_backup_files_count !== null && config.last_backup_files_count !== undefined && (
+                        {config.last_backup_files_count !== null && config.last_backup_files_count !== undefined && backupFileExists.get(config.id) === true && (
                           <div className="flex items-baseline gap-2">
                             <span className="text-gray-400 text-xs whitespace-nowrap">Files:</span>
                             <span className="text-gray-300 text-xs whitespace-nowrap">

@@ -64,12 +64,26 @@ pub fn run() {
 
     tauri::Builder::default()
         // IMPORTANTE: single-instance DEVE ser o PRIMEIRO plugin (ordem importa!)
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            // Se usuário tentar abrir segunda instância, foca janela principal existente
-            log::info!("Single instance detected, focusing existing main window");
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.set_focus();
-                let _ = window.unminimize();
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            // Detectar se é modo CLI (--backup <config_id>)
+            let is_cli_backup = argv.len() >= 3 && argv.get(1).map(|s| s.as_str()) == Some("--backup");
+
+            if is_cli_backup {
+                // Modo CLI: abrir janela de progresso agendado
+                log::info!("Single instance detected with --backup arg, opening scheduled-progress window");
+                if let Some(window) = app.get_webview_window("scheduled-progress") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                } else {
+                    log::warn!("scheduled-progress window not found, attempting to create");
+                }
+            } else {
+                // Modo normal: focar janela principal existente
+                log::info!("Single instance detected, focusing existing main window");
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.set_focus();
+                    let _ = window.unminimize();
+                }
             }
         }))
         .plugin(tauri_plugin_cli::init())
@@ -95,6 +109,7 @@ pub fn run() {
             commands::test_schedule_now,
             commands::is_scheduled_mode,
             commands::open_schedule_logs,
+            commands::verify_backup_exists,
             commands::list_available_backups,
             commands::restore_backup,
         ])

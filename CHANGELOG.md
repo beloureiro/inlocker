@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - 2025-11-22
+
+### Bug Fixes
+
+- **scheduling:** implement Test Now button and backup validation
+
+  - Test Now improvements:
+  - Open scheduled-progress window instead of launchctl kickstart
+  - Add CLI arg detection in single-instance plugin
+  - Add window routing and event listeners
+  - Redesign progress UI with dark theme
+  - Backup validation:
+  - Add verify_backup_exists command
+  - Validate file existence before showing stats
+  - Prevent stale metadata display
+
 ## [0.6.2] - 2025-11-21
 
 ### Bug Fixes

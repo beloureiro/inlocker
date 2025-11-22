@@ -10,26 +10,33 @@ function App() {
   const { loadConfigs, saveConfig, isLoading, error } = useBackupStore();
   const [isScheduledMode, setIsScheduledMode] = useState<boolean | null>(null);
 
-  // Detect if running in scheduled/CLI mode
+  // Detect if running in scheduled/CLI mode or in progress window
   useEffect(() => {
-    // Use official Tauri CLI plugin to detect --backup argument
-    import('@tauri-apps/plugin-cli').then(({ getMatches }) => {
-      getMatches()
-        .then((matches) => {
-          // Check if --backup argument was provided
-          const backupArg = matches.args.backup;
-          const isScheduled = backupArg && backupArg.value !== null;
-          setIsScheduledMode(isScheduled);
+    // Check URL parameter first (for scheduled-progress window)
+    const urlParams = new URLSearchParams(window.location.search);
+    const windowParam = urlParams.get('window');
 
-          if (isScheduled) {
-            console.log('Running in scheduled mode for backup:', backupArg.value);
-          }
-        })
-        .catch((error) => {
-          console.error('Failed to get CLI matches:', error);
-          setIsScheduledMode(false);
-        });
-    });
+    if (windowParam === 'progress') {
+      console.log('[App] Running in progress window (URL param detected)');
+      setIsScheduledMode(true);
+      return;
+    }
+
+    // Otherwise check CLI args
+    const detectCLI = async () => {
+      try {
+        const { getMatches } = await import('@tauri-apps/plugin-cli');
+        const matches = await getMatches();
+        const backupArg = matches.args.backup;
+        const isScheduled = backupArg && backupArg.value !== null;
+        setIsScheduledMode(isScheduled);
+      } catch (error) {
+        console.error('[App] Error detecting CLI mode:', error);
+        setIsScheduledMode(false);
+      }
+    };
+
+    detectCLI();
   }, []);
 
   // Load configs on mount (only in normal mode)
@@ -71,11 +78,13 @@ function App() {
 
   // Show loading while detecting mode
   if (isScheduledMode === null) {
+    console.log('[App] Rendering loading state (isScheduledMode is null)');
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-700 text-lg">Iniciando InLocker...</p>
+          <p className="text-gray-500 text-sm mt-2">Detectando modo de execução...</p>
         </div>
       </div>
     );
@@ -83,8 +92,11 @@ function App() {
 
   // Show progress UI for scheduled backups
   if (isScheduledMode === true) {
+    console.log('[App] Rendering ScheduledBackupProgress component');
     return <ScheduledBackupProgress />;
   }
+
+  console.log('[App] Rendering normal app UI');
 
   // Normal app UI
   return (

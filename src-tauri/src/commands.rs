@@ -7,7 +7,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 /// Application state wrapper
 pub struct AppState {
@@ -484,36 +484,27 @@ pub async fn cancel_restore(
     }
 }
 
-/// Test a schedule now (manual kickstart)
+/// Test a schedule now (open progress window and emit event)
 #[tauri::command]
-pub async fn test_schedule_now(config_id: String) -> Result<String, String> {
+pub async fn test_schedule_now(
+    app: tauri::AppHandle,
+    config_id: String,
+) -> Result<String, String> {
     log::info!("Manual test requested for schedule: {}", config_id);
 
-    // Get label
-    let label = format!("com.inlocker.backup.{}", config_id);
-
-    // Get UID
-    let uid_output = std::process::Command::new("id")
-        .args(&["-u"])
-        .output()
-        .map_err(|e| format!("Failed to get UID: {}", e))?;
-
-    let uid = String::from_utf8_lossy(&uid_output.stdout).trim().to_string();
-    let domain_target = format!("gui/{}/{}", uid, label);
-
-    // Execute kickstart
-    let output = std::process::Command::new("launchctl")
-        .args(&["kickstart", "-k", &domain_target])
-        .output()
-        .map_err(|e| format!("Failed to execute kickstart: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Kickstart failed: {}", stderr));
+    // Open scheduled-progress window
+    if let Some(window) = app.get_webview_window("scheduled-progress") {
+        let _ = window.show();
+        let _ = window.set_focus();
+        log::info!("Opened scheduled-progress window for test backup");
+    } else {
+        return Err("scheduled-progress window not found".to_string());
     }
 
-    log::info!("Schedule test executed successfully");
-    Ok(format!("Backup job triggered manually for {}", config_id))
+    // Emit event to scheduled-progress window to trigger backup
+    let _ = app.emit_to("scheduled-progress", "test-backup-trigger", config_id.clone());
+
+    Ok(format!("Test backup window opened for {}", config_id))
 }
 
 /// Check if app is running in scheduled/CLI mode
@@ -545,6 +536,58 @@ pub async fn open_schedule_logs(config_id: String) -> Result<(), String> {
 
     log::info!("Opened logs directory for config: {}", config_id);
     Ok(())
+}
+
+/// Verify if the last backup file still exists on disk
+#[tauri::command]
+pub async fn verify_backup_exists(
+    state: State<'_, AppState>,
+    config_id: String,
+) -> Result<bool, String> {
+    let configs = state.configs.lock().map_err(|e| e.to_string())?;
+
+    let config = configs
+        .iter()
+        .find(|c| c.id == config_id)
+        .ok_or("Configuration not found")?;
+
+    if config.last_backup_at.is_none() {
+        return Ok(false);
+    }
+
+    // Find the most recent backup file in destination_path
+    let dest_dir = std::path::Path::new(&config.destination_path);
+
+    if !dest_dir.exists() || !dest_dir.is_dir() {
+        return Ok(false);
+    }
+
+    // Read directory and find backup files
+    let entries = std::fs::read_dir(dest_dir)
+        .map_err(|e| format!("Failed to read destination directory: {}", e))?;
+
+    let mut backup_files = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let file_name = path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+
+        // Match InLocker backup files
+        if file_name.starts_with("Bkp_InLocker_") {
+            if let Ok(metadata) = entry.metadata() {
+                if let Ok(modified) = metadata.modified() {
+                    backup_files.push((path, modified));
+                }
+            }
+        }
+    }
+
+    // Sort by modification time (most recent first)
+    backup_files.sort_by(|a, b| b.1.cmp(&a.1));
+
+    // Check if most recent backup file exists
+    Ok(!backup_files.is_empty())
 }
 
 /// Diagnose scheduling system for a configuration

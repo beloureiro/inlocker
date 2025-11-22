@@ -161,6 +161,11 @@
 
 ## phase 4: polish and delivery
 
+### critical bug fixes (2025-11-22)
+- [x] Fix Test Now button with single-instance plugin (lib.rs:67-88, detects CLI args, opens scheduled-progress window)
+- [x] Add backup file existence validation before displaying last backup metadata (commands.rs:550-600, BackupList.tsx:97-118)
+- [x] Validate file exists at destination_path before showing last backup stats (BackupList.tsx:541-564)
+
 ### dashboard and metrics
 - [ ] Create Dashboard component
 - [ ] Display "Last backup: X hours ago"
@@ -169,13 +174,13 @@
 - [ ] Show next scheduled backup
 
 ### restore (restoration) ✅ COMPLETE
-- [x] Implement command `restore_backup` ✅
-- [x] Implement decompression (tar.zst) ✅
-- [x] Implement command `list_available_backups` ✅
-- [x] Add Restore button to UI ✅
-- [x] Allow choosing restore destination ✅
-- [x] List and select from available backups ✅
-- [ ] Decrypt (will be added with encryption feature)
+- [x] Implement command `restore_backup`
+- [x] Implement decompression (tar.zst)
+- [x] Implement command `list_available_backups`
+- [x] Add Restore button to UI
+- [x] Allow choosing restore destination
+- [x] List and select from available backups
+- [x] Decrypt (backup.rs:964-1028)
 - [ ] Dedicated BackupHistory component (future enhancement)
 
 ### integrity verification
@@ -244,48 +249,47 @@ See detailed testing strategy in `docs/08-testing-strategy.md`
 
 #### Edge Case Tests 🔄 IN PROGRESS (10+/20 required)
 **File System Edge Cases:**
-- [x] Symlink escape prevention (tested) ✅
-- [x] Very long filenames (200-250 chars) ✅
-- [x] Permission-denied files ✅
-- [ ] Hardlink deduplication ⚠️ HIGH PRIORITY
+- [x] Symlink escape prevention
+- [x] Very long filenames (200-250 chars)
+- [x] Permission-denied files
+- [x] Hardlink deduplication (critical_backup_tests.rs:656-758)
 - [ ] FIFO/named pipe handling
 - [ ] Device file handling
 
 **System Edge Cases:**
-- [x] Concurrent file modifications (TOCTOU) ✅
-- [x] Incremental race conditions ✅
-- [x] Disk full during backup ✅ PASSING
-- [x] Disk full during restore ✅ PASSING
+- [x] Concurrent file modifications (TOCTOU)
+- [x] Incremental race conditions
+- [x] Disk full during backup
+- [x] Disk full during restore
 - [ ] Interrupted backup recovery
 - [ ] Interrupted restore recovery
 
 #### Performance Tests 🔄 IN PROGRESS (4/8 required)
-- [x] 1GB backup completes in <2 minutes ✅ IMPLEMENTED (#[ignore])
-- [x] Compression ratio >2x for text files ✅ PASSING (5841x)
+- [x] 1GB backup completes in <2 minutes (performance_tests.rs:54, test ignored)
+- [x] Compression ratio >2x for text files (performance_tests.rs:148, passing 5841x)
 - [ ] Memory usage <500MB for 10GB backup
-- [x] Incremental backup 10x faster than full ✅ PASSING (52x)
-- [x] 10,000 small files performance ✅ IMPLEMENTED (#[ignore])
+- [x] Incremental backup 10x faster than full (performance_tests.rs:218, passing 52x)
+- [x] 10,000 small files performance (performance_tests.rs:312, test ignored)
 - [ ] 100GB+ backup stress test
 - [ ] Concurrent backup handling
 - [ ] CPU usage during backup <80%
 
 #### Cryptography Tests ✅ COMPLETE (31/25 required - exceeded goal!)
-**Status**: crypto.rs implemented with full test coverage
-- [x] AES-256-GCM encryption/decryption cycle ✅
-- [x] IV/nonce uniqueness (10 encryptions tested) ✅
-- [x] Authentication tag validation ✅
-- [x] Argon2id key derivation (RFC 9106 compliant) ✅
-- [x] Password strength validation ✅
-- [x] Wrong password rejection ✅
-- [x] Tampered ciphertext detection ✅
-- [x] Tampered metadata detection ✅
-- [x] Empty data encryption ✅
-- [x] Large data encryption (1MB) ✅
-- [x] Binary data encryption ✅
-- [x] Unicode data encryption ✅
-- [x] File encryption/decryption cycle ✅
-- [x] Metadata serialization ✅
-- [x] Encryption determinism (different nonces) ✅
+- [x] AES-256-GCM encryption/decryption cycle
+- [x] IV/nonce uniqueness (10 encryptions tested)
+- [x] Authentication tag validation
+- [x] Argon2id key derivation (RFC 9106 compliant)
+- [x] Password strength validation
+- [x] Wrong password rejection
+- [x] Tampered ciphertext detection
+- [x] Tampered metadata detection
+- [x] Empty data encryption
+- [x] Large data encryption (1MB)
+- [x] Binary data encryption
+- [x] Unicode data encryption
+- [x] File encryption/decryption cycle
+- [x] Metadata serialization
+- [x] Encryption determinism (different nonces)
 - [ ] NIST test vectors validation
 
 #### Test Coverage Goals
