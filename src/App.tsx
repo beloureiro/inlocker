@@ -5,6 +5,7 @@ import { RestoreSelector } from './ui/components/RestoreSelector';
 import { BackupList } from './ui/components/BackupList';
 import ScheduledBackupProgress from './ui/components/ScheduledBackupProgress';
 import { useBackupStore, BackupConfig } from './store/useBackupStore';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 function App() {
   const { loadConfigs, saveConfig, isLoading, error } = useBackupStore();
@@ -45,6 +46,23 @@ function App() {
       loadConfigs();
     }
   }, [loadConfigs, isScheduledMode]);
+
+  // Emit "window-ready" event when React finishes rendering
+  useEffect(() => {
+    const emitReady = async () => {
+      try {
+        const window = getCurrentWindow();
+        await window.emit('window-ready', { label: window.label });
+        console.log('[App] Emitted window-ready event for:', window.label);
+      } catch (error) {
+        console.error('[App] Failed to emit window-ready:', error);
+      }
+    };
+
+    // Emit after a small delay to ensure render is complete
+    const timer = setTimeout(emitReady, 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleFolderSelected = async (
     sourcePath: string,

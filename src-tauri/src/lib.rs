@@ -8,7 +8,7 @@ pub mod types;
 use commands::AppState;
 use scheduler::SchedulerState;
 use types::BackupConfig;
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Listener, Manager};
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -116,16 +116,36 @@ pub fn run() {
         .setup(move |app| {
             let app_handle = app.handle().clone();
 
+            // Setup window-ready event listeners
+            // Listen for "window-ready" event from frontend and show window when ready
+            if let Some(window) = app.get_webview_window("main") {
+                let main_window = window.clone();
+                window.listen("window-ready", move |_event| {
+                    log::info!("Received window-ready event for main window");
+                    if let Err(e) = main_window.show() {
+                        log::error!("Failed to show main window: {}", e);
+                    } else {
+                        log::info!("Successfully showed main window after ready event");
+                    }
+                });
+            }
+
+            if let Some(window) = app.get_webview_window("scheduled-progress") {
+                let progress_window = window.clone();
+                window.listen("window-ready", move |_event| {
+                    log::info!("Received window-ready event for scheduled-progress window");
+                    if let Err(e) = progress_window.show() {
+                        log::error!("Failed to show scheduled-progress window: {}", e);
+                    } else {
+                        log::info!("Successfully showed scheduled-progress window after ready event");
+                    }
+                });
+            }
+
             // CLI mode: run backup with progress UI
             if let Some(config_id) = cli_backup_config_id {
-                // Show SCHEDULED PROGRESS window (NOT main window)
-                if let Some(window) = app.get_webview_window("scheduled-progress") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                    log::info!("Opened scheduled-progress window for backup: {}", config_id);
-                } else {
-                    log::error!("Failed to get scheduled-progress window!");
-                }
+                // Window will be shown when frontend emits "window-ready" event
+                log::info!("CLI mode: waiting for scheduled-progress window to emit ready event for backup: {}", config_id);
 
                 tauri::async_runtime::spawn(async move {
                     log::info!("Executing scheduled backup for config: {}", config_id);
@@ -141,13 +161,8 @@ pub fn run() {
                     }
                 });
             } else {
-                // Normal app startup - Show MAIN window and re-register schedules
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    log::info!("Opened main window for normal app usage");
-                } else {
-                    log::error!("Failed to get main window!");
-                }
+                // Normal app startup - Window will be shown when frontend emits "window-ready" event
+                log::info!("Normal mode: waiting for main window to emit ready event");
 
                 tauri::async_runtime::spawn(async move {
                     if let Err(e) = restore_schedules(app_handle).await {
