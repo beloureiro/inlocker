@@ -1,11 +1,11 @@
 # BUG #002: Sistema de Agendamento Não Funcional
 
-**Status:** 🟡 CORREÇÃO IMPLEMENTADA - AGUARDANDO TESTES
+**Status:** 🔴 NÃO RESOLVIDO - TELA BRANCA
 **Priority:** P0 (Bloqueia produção)
 **Branch:** `fix/scheduling-system-overhaul`
 **Created:** 2025-11-09
-**Last Updated:** 2025-11-21 (Implementada solução de janelas separadas - não testada)
-**Progress:** 90% (Implementação ✅ | Testes pendentes ⏸️)
+**Last Updated:** 2025-11-23 (Tela branca sem UI aparece)
+**Progress:** [ ] Tela branca aparece, UI não carrega
 
 ---
 
@@ -83,9 +83,9 @@
 - [x] Compilação: 0 erros
 - [ ] Teste usuário: verificar se eliminou tela branca
 
-### ⏸️ Aguardando Testes do Usuário
+### ❌ Testes Falharam
 - [ ] Teste: backup dispara automaticamente no horário configurado
-- [ ] Teste: janela mostra UI customizada (não tela branca)
+- [ ] Teste: janela mostra UI customizada (não tela branca) - **FALHOU: TELA BRANCA**
 - [ ] Teste: progresso atualiza em tempo real
 - [ ] Teste: notificação macOS ao completar
 - [ ] Teste: janela fecha automaticamente após conclusão
@@ -409,6 +409,20 @@ O sistema de agendamento **dispara backups corretamente**, mas **abre segunda ja
 - [ ] Teste 3: App "main" aberto + `--backup` dispara → "scheduled-progress" abre, "main" continua
 - [ ] Teste 4: Tentar abrir app duas vezes → single instance previne duplicação de "main"
 - [ ] Teste 5: launchd dispara backup → janela "scheduled-progress" aparece, fecha ao terminar
+- [ ] **BUG ATIVO**: Tela branca aparece sem UI
+
+#### 4.6.6 Tentativa: on_page_load - FALHOU
+- [ ] Tentado: .on_page_load() no Builder com PageLoadEvent::Finished
+- [ ] Resultado: janelas não aparecem na tela (mesmo log dizendo sucesso)
+- [ ] Problema: on_page_load detecta carregamento do HTML mas React ainda não renderizou
+- [ ] Revertido com git restore
+
+#### 4.6.7 Solução correta: evento "window-ready" do frontend - IMPLEMENTADO
+- [x] Frontend emite evento quando React termina render (App.tsx useEffect)
+- [x] Backend escuta evento e aí chama show() (lib.rs listeners)
+- [x] Explica porque Test Now funciona (React já renderizou)
+- [x] import Listener trait no lib.rs
+- [ ] TESTAR: pnpm tauri dev e launchd trigger
 
 ---
 
@@ -679,6 +693,6 @@ await window.__TAURI__.invoke('diagnose_schedule', { configId: 'seu-config-id' }
 
 ---
 
-**Última atualização:** 2025-11-09
-**Autor:** Claude Code (solicitado por usuário)
-**Revisão:** Documento reflete progresso real (90% completo - Fases 1-4.5 completas, CLI Mode verificado como implementado)
+**Última atualização:** 2025-11-23
+**Autor:** Claude Code
+**Revisão:** [ ] Tela branca - solução: on_page_load

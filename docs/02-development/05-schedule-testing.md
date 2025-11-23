@@ -155,41 +155,21 @@ If you don't want to wait 2 minutes:
 
 ## Known Issues / Bugs
 
-### 🔴 Bug: Segunda Janela Abre ao Executar Backup Agendado
+### 🔴 Bug: Tela Branca Aparece
 
-**Status:** ATIVO (2025-11-09)
+**Status:** NÃO RESOLVIDO (2025-11-23)
 
 **Descrição:**
-- [ ] App está aberto (janela principal visível)
-- [ ] Usuário configura schedule para daqui a poucos minutos (ex: 17:56)
-- [ ] Quando chega o horário agendado (17:56)
-- [ ] **PROBLEMA:** Segunda janela do InLocker abre (app duplicado)
-- [ ] **PROBLEMA:** Backup NÃO é executado
-- [ ] Apenas segunda instância do app aparece na tela
+- [ ] Janela abre mas mostra apenas tela branca
+- [ ] UI não carrega (ScheduledBackupProgress.tsx)
 
-**Comportamento Esperado:**
-- [ ] Backup deve executar automaticamente
-- [ ] Mostrar progresso/notificações na janela já aberta
-- [ ] NÃO abrir segunda janela se app já está rodando
-
-**Causa Provável:**
-- `launchd` executa `/path/inlocker --backup config_id`
-- Código inicia nova instância completa do app com GUI
-- Não detecta que app já está em execução
-- Não previne abertura de segunda janela
-
-**Solução Necessária:**
-- [ ] Implementar single instance (detectar app já rodando) - `tauri-plugin-single-instance`
-- [ ] Criar JANELA SEPARADA para progresso de backup agendado (não reutilizar janela principal do app)
-  - Janela principal: configuração de backups (uso diário do app)
-  - Janela de progresso: aparece APENAS quando launchd dispara backup agendado
-- [ ] OU executar backup TRUE HEADLESS (antes do tauri::Builder, sem GUI)
-- [ ] Se app rodando: NÃO duplicar janela principal, usar janela de progresso separada
-- [ ] Se app não rodando: executar backup com janela de progresso dedicada
+**Solução:**
+- [ ] https://github.com/tauri-apps/tauri/issues/9393
+- [ ] usar on_page_load(PageLoadEvent::Finished) antes de show()
 
 **Arquivo de Bug Completo:** `/Users/blc/Dev/Apps/InLocker/docs/04-bugs/002-scheduling-system-not-working.md`
 
 ---
 
-**Last Updated:** 2025-11-09
-**Status:** Testing in progress (bug reportado)
+**Last Updated:** 2025-11-23
+**Status:** [ ] Bug ativo - tela branca
