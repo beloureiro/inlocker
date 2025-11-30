@@ -67,19 +67,21 @@ InLocker creates different outputs depending on your chosen mode:
 
 **MVP Progress:** 🎯 **99% COMPLETE** - Production-ready core!
 
-### ✅ completed features
-- ✅ **3 Backup Modes** - Copy, Compressed, or Encrypted (user choice)
-- ✅ **Backup Core** - Full + Incremental with mode selection
-- ✅ **Parallel Backups** - Execute multiple backups simultaneously with confirmation dialog
-- ✅ **Scheduling** - macOS launchd integration (works with app closed)
-- ✅ **Restore** - Dedicated RestoreSelector with real-time progress, cancellation support, and spinner feedback
-- ✅ **Encryption** - AES-256-GCM with password UI (31 tests passing)
-- ✅ **Real-time UI** - Live progress feedback with stage indicators during backups and restore
-- ✅ **Notifications** - Native macOS alerts for backup events
-- ✅ **Security** - All critical bugs fixed, timing attacks prevented
-- ✅ **Performance** - 52x incremental speedup, 5841x compression ratio
+### completed features
+- **3 Backup Modes** - Copy, Compressed, or Encrypted (user choice)
+- **Backup Core** - Full + Incremental with mode selection
+- **Parallel Backups** - Execute multiple backups simultaneously with confirmation dialog
+- **Scheduling** - macOS launchd integration (works with app closed)
+- **Scheduled Progress Window** - Pure HTML progress UI with elapsed timer, sizes display
+- **Restore** - Dedicated RestoreSelector with real-time progress, cancellation support, and spinner feedback
+- **Encryption** - AES-256-GCM with password UI (31 tests passing)
+- **Real-time UI** - Live progress feedback with stage indicators during backups and restore
+- **App Preferences** - Settings modal with auto-close option for scheduled backups
+- **Notifications** - Native macOS alerts for backup events
+- **Security** - All critical bugs fixed, timing attacks prevented
+- **Performance** - 52x incremental speedup, 5841x compression ratio
 
-### ⏳ in progress
+### in progress
 - Manual validation tests (100 consecutive backups)
 - Dashboard with metrics (optional)
 
@@ -119,7 +121,7 @@ Complete documentation is organized in `/docs`:
 ## tech stack
 
 **frontend:**
-- React 19.2 + TypeScript 5.8
+- React 19.1 + TypeScript 5.8
 - TailwindCSS 3.4 + shadcn/ui
 - Zustand 5.0 (state)
 - lucide-react (icons)
@@ -134,7 +136,7 @@ Complete documentation is organized in `/docs`:
 **build tools:**
 - Node.js 23.11.1
 - pnpm 10.19.0
-- Vite 7.2.0
+- Vite 7.0
 
 ---
 
@@ -213,16 +215,17 @@ cd src-tauri && cargo test --all
 
 ## roadmap
 
-### ✅ MVP features (99% complete)
-- ✅ Folder selection and configuration management
-- ✅ Manual and automatic backup (launchd)
-- ✅ Full + Incremental backup types
-- ✅ 3 Backup modes (Copy, Compressed, Encrypted)
-- ✅ Parallel backups execution
-- ✅ Optional encryption with password UI
-- ✅ Point-in-time restore with real-time progress and cancellation
-- ✅ Real-time progress UI with stage indicators
-- ⏳ Dashboard with metrics (optional)
+### MVP features (99% complete)
+- Folder selection and configuration management
+- Manual and automatic backup (launchd)
+- Full + Incremental backup types
+- 3 Backup modes (Copy, Compressed, Encrypted)
+- Parallel backups execution
+- Optional encryption with password UI
+- Point-in-time restore with real-time progress and cancellation
+- Real-time progress UI with stage indicators
+- App preferences (auto-close scheduled backup window)
+- Dashboard with metrics (optional - in progress)
 
 ### future enhancements (post-MVP)
 - Pattern exclusion (node_modules, .git, *.log)
