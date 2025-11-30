@@ -35,19 +35,6 @@
         "theme": "Dark",
         "devtools": true,
         "visible": false
-      },
-      {
-        "label": "scheduled-progress",
-        "title": "Backup Agendado - InLocker",
-        "url": "index.html?window=progress",
-        "width": 600,
-        "height": 450,
-        "center": true,
-        "resizable": false,
-        "titleBarStyle": "Overlay",
-        "hiddenTitle": true,
-        "devtools": true,
-        "visible": false
       }
     ],
     "security": {

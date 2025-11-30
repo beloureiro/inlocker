@@ -63,13 +63,13 @@ pub fn run() {
     };
 
     tauri::Builder::default()
-        // IMPORTANTE: single-instance DEVE ser o PRIMEIRO plugin (ordem importa!)
+        // IMPORTANT: single-instance MUST be the FIRST plugin (order matters!)
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            // Detectar se é modo CLI (--backup <config_id>)
+            // Detect CLI mode (--backup <config_id>)
             let is_cli_backup = argv.len() >= 3 && argv.get(1).map(|s| s.as_str()) == Some("--backup");
 
             if is_cli_backup {
-                // Modo CLI: abrir janela de progresso agendado
+                // CLI mode: open scheduled progress window
                 log::info!("Single instance detected with --backup arg, opening scheduled-progress window");
                 if let Some(window) = app.get_webview_window("scheduled-progress") {
                     let _ = window.show();
@@ -78,7 +78,7 @@ pub fn run() {
                     log::warn!("scheduled-progress window not found, attempting to create");
                 }
             } else {
-                // Modo normal: focar janela principal existente
+                // Normal mode: focus existing main window
                 log::info!("Single instance detected, focusing existing main window");
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.set_focus();
@@ -112,42 +112,93 @@ pub fn run() {
             commands::verify_backup_exists,
             commands::list_available_backups,
             commands::restore_backup,
+            commands::load_preferences,
+            commands::save_preferences,
         ])
         .setup(move |app| {
             let app_handle = app.handle().clone();
 
-            // Setup window-ready event listeners
-            // Listen for "window-ready" event from frontend and show window when ready
-            if let Some(window) = app.get_webview_window("main") {
-                let main_window = window.clone();
-                window.listen("window-ready", move |_event| {
-                    log::info!("Received window-ready event for main window");
-                    if let Err(e) = main_window.show() {
-                        log::error!("Failed to show main window: {}", e);
-                    } else {
-                        log::info!("Successfully showed main window after ready event");
-                    }
-                });
-            }
+            // Determine which mode we're in
+            let is_cli_mode = cli_backup_config_id.is_some();
 
-            if let Some(window) = app.get_webview_window("scheduled-progress") {
-                let progress_window = window.clone();
-                window.listen("window-ready", move |_event| {
-                    log::info!("Received window-ready event for scheduled-progress window");
-                    if let Err(e) = progress_window.show() {
-                        log::error!("Failed to show scheduled-progress window: {}", e);
-                    } else {
-                        log::info!("Successfully showed scheduled-progress window after ready event");
+            // Setup window-ready event listeners based on mode
+            if is_cli_mode {
+                // CLI mode: Create and show scheduled-progress window dynamically
+                // Window is NOT in tauri.conf.json - must be created here
+                log::info!("CLI mode detected: creating scheduled-progress window dynamically");
+
+                // Hide main window (in case it was created)
+                if let Some(main_window) = app.get_webview_window("main") {
+                    let _ = main_window.hide();
+                    log::info!("Main window hidden for CLI mode");
+                }
+
+                // Create scheduled-progress window dynamically with pure HTML (no React)
+                let app_handle_for_window = app.handle().clone();
+                match tauri::WebviewWindowBuilder::new(
+                    &app_handle_for_window,
+                    "scheduled-progress",
+                    tauri::WebviewUrl::App("progress.html".into())
+                )
+                .title("Scheduled Backup - InLocker")
+                .inner_size(600.0, 450.0)
+                .center()
+                .resizable(false)
+                .visible(false)
+                .build() {
+                    Ok(window) => {
+                        log::info!("Created scheduled-progress window dynamically");
+                        let progress_window = window.clone();
+                        window.listen("window-ready", move |_event| {
+                            log::info!("Received window-ready event for scheduled-progress window");
+                            if let Err(e) = progress_window.show() {
+                                log::error!("Failed to show scheduled-progress window: {}", e);
+                            } else {
+                                log::info!("Successfully showed scheduled-progress window after ready event");
+                                if let Err(e) = progress_window.set_focus() {
+                                    log::warn!("Failed to focus scheduled-progress window: {}", e);
+                                }
+                            }
+                        });
                     }
-                });
+                    Err(e) => {
+                        log::error!("Failed to create scheduled-progress window: {}", e);
+                    }
+                }
+            } else {
+                // Normal mode: Show main window only
+                // scheduled-progress window will be created on-demand by test_schedule_now
+                log::info!("Normal mode detected: setting up main window only");
+
+                // Setup listener for main window
+                if let Some(window) = app.get_webview_window("main") {
+                    let main_window = window.clone();
+                    window.listen("window-ready", move |event| {
+                        let payload_str = event.payload();
+                        log::info!("Received window-ready event with payload: {}", payload_str);
+
+                        if payload_str.contains("\"label\":\"main\"") {
+                            log::info!("Processing window-ready for main window");
+                            if let Err(e) = main_window.show() {
+                                log::error!("Failed to show main window: {}", e);
+                            } else {
+                                log::info!("Successfully showed main window after ready event");
+                            }
+                        }
+                    });
+                } else {
+                    log::error!("main window not found in normal mode!");
+                }
             }
 
             // CLI mode: run backup with progress UI
             if let Some(config_id) = cli_backup_config_id {
-                // Window will be shown when frontend emits "window-ready" event
-                log::info!("CLI mode: waiting for scheduled-progress window to emit ready event for backup: {}", config_id);
+                log::info!("CLI mode: starting backup for config: {}", config_id);
 
                 tauri::async_runtime::spawn(async move {
+                    // Wait a bit for the window to be ready
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
                     log::info!("Executing scheduled backup for config: {}", config_id);
                     match run_scheduled_backup(&app_handle, &config_id).await {
                         Ok(_) => {
@@ -161,8 +212,8 @@ pub fn run() {
                     }
                 });
             } else {
-                // Normal app startup - Window will be shown when frontend emits "window-ready" event
-                log::info!("Normal mode: waiting for main window to emit ready event");
+                // Normal app startup
+                log::info!("Normal mode: starting regular app");
 
                 tauri::async_runtime::spawn(async move {
                     if let Err(e) = restore_schedules(app_handle).await {
@@ -205,9 +256,9 @@ async fn run_scheduled_backup(app: &tauri::AppHandle, config_id: &str) -> Result
     log::info!("Running backup for: {}", config.name);
 
     // Emit progress event: Initializing
-    let _ = app.emit("backup-progress", serde_json::json!({
+    let _ = app.emit("backup:progress", serde_json::json!({
         "stage": "initializing",
-        "message": format!("Inicializando backup: {}", config.name),
+        "message": format!("Initializing backup: {}", config.name),
         "percentage": 0
     }));
 
@@ -219,9 +270,9 @@ async fn run_scheduled_backup(app: &tauri::AppHandle, config_id: &str) -> Result
     );
 
     // Emit progress event: Scanning
-    let _ = app.emit("backup-progress", serde_json::json!({
+    let _ = app.emit("backup:progress", serde_json::json!({
         "stage": "scanning",
-        "message": "Escaneando arquivos...",
+        "message": "Scanning files...",
         "percentage": 10
     }));
 
@@ -248,9 +299,9 @@ async fn run_scheduled_backup(app: &tauri::AppHandle, config_id: &str) -> Result
     };
 
     // Emit progress event: Compressing
-    let _ = app.emit("backup-progress", serde_json::json!({
+    let _ = app.emit("backup:progress", serde_json::json!({
         "stage": "compressing",
-        "message": "Comprimindo arquivos...",
+        "message": "Compressing files...",
         "percentage": 30
     }));
 
@@ -269,9 +320,9 @@ async fn run_scheduled_backup(app: &tauri::AppHandle, config_id: &str) -> Result
     ) {
         Ok(job) => {
             // Emit progress event: Finalizing
-            let _ = app.emit("backup-progress", serde_json::json!({
+            let _ = app.emit("backup:progress", serde_json::json!({
                 "stage": "finalizing",
-                "message": "Finalizando backup...",
+                "message": "Finalizing backup...",
                 "percentage": 90
             }));
             log::info!("Backup completed: {} files, {} bytes",
@@ -293,9 +344,9 @@ async fn run_scheduled_backup(app: &tauri::AppHandle, config_id: &str) -> Result
             let size_mb = job.compressed_size.unwrap_or(0) as f64 / 1_048_576.0;
 
             // Emit progress event: Completed
-            let _ = app.emit("backup-progress", serde_json::json!({
+            let _ = app.emit("backup:progress", serde_json::json!({
                 "stage": "completed",
-                "message": format!("Backup concluído! {} arquivos ({:.1} MB)", files_count, size_mb),
+                "message": format!("Backup completed! {} files ({:.1} MB)", files_count, size_mb),
                 "percentage": 100,
                 "files_processed": files_count,
                 "total_files": files_count
