@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scheduled Backup - InLocker</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #030712;
+      color: #e5e7eb;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+    .logo-icon {
+      width: 40px;
+      height: 40px;
+      background: #059669;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .logo-icon svg { width: 24px; height: 24px; }
+    .logo-text h1 { font-size: 20px; font-weight: 600; color: white; }
+    .logo-text p { font-size: 12px; color: #9ca3af; }
+    .card {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 8px;
+      padding: 24px;
+      width: 100%;
+      max-width: 400px;
+    }
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid #065f46;
+      border-top-color: #10b981;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 24px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .stage {
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .stage-name {
+      font-size: 12px;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+    .stage-message { color: #e5e7eb; }
+    .stage-details {
+      font-size: 12px;
+      color: #6b7280;
+      font-family: monospace;
+      margin-top: 4px;
+    }
+    .progress-bar {
+      margin-bottom: 16px;
+    }
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #9ca3af;
+      margin-bottom: 8px;
+    }
+    .progress-track {
+      width: 100%;
+      height: 8px;
+      background: #1f2937;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: #059669;
+      border-radius: 4px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+    .file-counter {
+      text-align: center;
+      font-size: 12px;
+      color: #9ca3af;
+      font-family: monospace;
+    }
+    .footer {
+      font-size: 12px;
+      color: #6b7280;
+      text-align: center;
+      margin-top: 24px;
+      max-width: 280px;
+    }
+    .completed .spinner { display: none; }
+    .completed .stage-name { color: #10b981; }
+    .error .spinner { display: none; }
+    .error .stage-name { color: #ef4444; }
+    .error .progress-fill { background: #ef4444; }
+  </style>
+</head>
+<body>
+  <div class="logo">
+    <div class="logo-icon">
+      <svg fill="none" stroke="white" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+      </svg>
+    </div>
+    <div class="logo-text">
+      <h1>InLocker</h1>
+      <p id="backup-name">Scheduled Backup</p>
+    </div>
+  </div>
+
+  <div class="card" id="progress-card">
+    <div class="spinner" id="spinner"></div>
+    <div class="stage">
+      <p class="stage-name" id="stage-name">initializing</p>
+      <p class="stage-message" id="stage-message">Starting scheduled backup...</p>
+      <p class="stage-details" id="stage-details"></p>
+    </div>
+    <div class="progress-bar">
+      <div class="progress-header">
+        <span>Progress</span>
+        <span id="percentage">0%</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+    </div>
+    <div class="file-counter" id="file-counter"></div>
+  </div>
+
+  <p class="footer" id="footer">Window will close automatically when complete</p>
+
+  <script type="module">
+    // Import Tauri APIs from CDN (required for static HTML in public/)
+    const { listen } = await import('https://unpkg.com/@tauri-apps/api@2/event');
+    const { getCurrentWindow } = await import('https://unpkg.com/@tauri-apps/api@2/window');
+    const { invoke } = await import('https://unpkg.com/@tauri-apps/api@2/core');
+
+    console.log('[progress.html] Script loaded');
+
+    // DOM elements
+    const backupName = document.getElementById('backup-name');
+    const stageName = document.getElementById('stage-name');
+    const stageMessage = document.getElementById('stage-message');
+    const stageDetails = document.getElementById('stage-details');
+    const percentage = document.getElementById('percentage');
+    const progressFill = document.getElementById('progress-fill');
+    const fileCounter = document.getElementById('file-counter');
+    const progressCard = document.getElementById('progress-card');
+    const spinner = document.getElementById('spinner');
+    const footer = document.getElementById('footer');
+
+    // Auto-close delay after completion (ms)
+    const AUTO_CLOSE_DELAY = 3000;
+
+    // Listen for backup progress
+    await listen('backup:progress', (event) => {
+      console.log('[progress.html] Progress event:', event.payload);
+      const data = event.payload;
+
+      stageName.textContent = data.stage || 'processing';
+      stageMessage.textContent = data.message || '';
+      stageDetails.textContent = data.details || '';
+
+      // Calculate percentage
+      let pct = 0;
+      if (data.current !== undefined && data.total !== undefined && data.total > 0) {
+        pct = Math.round((data.current / data.total) * 100);
+      }
+      percentage.textContent = pct + '%';
+      progressFill.style.width = pct + '%';
+
+      // File counter
+      if (data.current !== undefined && data.total !== undefined) {
+        fileCounter.textContent = data.current.toLocaleString() + ' / ' + data.total.toLocaleString() + ' files';
+      }
+
+      // Completed state - auto close after delay
+      if (data.stage === 'completed') {
+        progressCard.classList.add('completed');
+        spinner.style.display = 'none';
+        footer.textContent = `Closing in ${AUTO_CLOSE_DELAY / 1000} seconds...`;
+
+        setTimeout(async () => {
+          try {
+            const window = getCurrentWindow();
+            await window.close();
+          } catch (err) {
+            console.error('[progress.html] Failed to close window:', err);
+          }
+        }, AUTO_CLOSE_DELAY);
+      }
+
+      // Error state
+      if (data.stage === 'error') {
+        progressCard.classList.add('error');
+        spinner.style.display = 'none';
+        footer.textContent = 'Close this window manually';
+      }
+    });
+
+    // Listen for test backup trigger (from Test Now button)
+    await listen('test-backup-trigger', async (event) => {
+      console.log('[progress.html] Test backup trigger:', event.payload);
+      const { config_id: configId, config_name: configName } = event.payload;
+
+      // Update backup name display
+      backupName.textContent = configName || 'Scheduled Backup';
+      stageMessage.textContent = 'Test backup starting...';
+
+      try {
+        await invoke('run_backup_now', { configId, password: undefined });
+        console.log('[progress.html] Backup invoke completed');
+      } catch (err) {
+        console.error('[progress.html] Backup failed:', err);
+        stageName.textContent = 'error';
+        stageMessage.textContent = 'Backup failed';
+        stageDetails.textContent = String(err);
+        progressCard.classList.add('error');
+        spinner.style.display = 'none';
+        footer.textContent = 'Close this window manually';
+      }
+    });
+
+    // Emit window-ready to notify Rust that the window is loaded
+    const window = getCurrentWindow();
+    await window.emit('window-ready', { label: window.label });
+    console.log('[progress.html] Emitted window-ready for:', window.label);
+  </script>
+</body>
+</html>

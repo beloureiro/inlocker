@@ -105,6 +105,7 @@ pub fn is_agent_loaded(config_id: &str) -> Result<bool, String> {
 
 /// Parse cron expression and convert to launchd StartCalendarInterval
 /// Cron format: "minute hour day month weekday"
+/// NOTE: launchd uses LOCAL timezone, no conversion needed
 /// Returns Vec of calendar intervals (can have multiple for complex schedules)
 fn parse_cron_to_calendar_interval(cron_expr: &str) -> Result<Vec<CalendarInterval>, String> {
     let parts: Vec<&str> = cron_expr.split_whitespace().collect();
@@ -125,7 +126,7 @@ fn parse_cron_to_calendar_interval(cron_expr: &str) -> Result<Vec<CalendarInterv
     // Simple case: specific time (e.g., "0 2 * * *" = daily at 2:00 AM)
     let mut intervals = Vec::new();
 
-    // Parse minute
+    // Parse minute and hour (input is in LOCAL timezone)
     let minutes = parse_cron_field(minute, 0, 59)?;
     let hours = parse_cron_field(hour, 0, 23)?;
     let days = if day == "*" {
@@ -151,6 +152,13 @@ fn parse_cron_to_calendar_interval(cron_expr: &str) -> Result<Vec<CalendarInterv
 
     for &m in &minutes {
         for &h in &hours {
+            // launchd uses LOCAL timezone, NOT UTC
+            // No conversion needed - just use the hour/minute as specified
+            log::info!(
+                "Scheduling backup at LOCAL time: {}:{:02}",
+                h, m
+            );
+
             let interval = CalendarInterval {
                 minute: Some(m),
                 hour: Some(h),
