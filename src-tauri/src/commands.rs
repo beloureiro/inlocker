@@ -1,7 +1,7 @@
 use crate::backup;
 use crate::launchd;
 use crate::scheduler::SchedulerState;
-use crate::types::{BackupConfig, BackupManifest, BackupResult, BackupType, ScheduleDiagnostics};
+use crate::types::{AppPreferences, BackupConfig, BackupManifest, BackupResult, BackupType, ScheduleDiagnostics};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -37,6 +37,20 @@ fn get_config_path(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|e| format!("Failed to create app data dir: {}", e))?;
 
     Ok(app_data_dir.join("configs.json"))
+}
+
+/// Get the path to the preferences file
+fn get_preferences_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+
+    // Ensure the directory exists
+    fs::create_dir_all(&app_data_dir)
+        .map_err(|e| format!("Failed to create app data dir: {}", e))?;
+
+    Ok(app_data_dir.join("preferences.json"))
 }
 
 /// Open folder picker dialog and return selected path
@@ -248,7 +262,33 @@ pub async fn run_backup_now(
         Ok(mut job) => {
             job.config_id = config_id.clone();
 
-            // Build and save new manifest
+            // FIRST: Emit completed event for progress window auto-close
+            // This must happen BEFORE the slow manifest scan to avoid UI appearing stuck
+            let files_count = job.files_count.unwrap_or(0);
+            let original_mb = job.original_size.unwrap_or(0) as f64 / 1_048_576.0;
+            let compressed_mb = job.compressed_size.unwrap_or(0) as f64 / 1_048_576.0;
+            let compression_pct = if job.original_size.unwrap_or(0) > 0 {
+                (1.0 - (job.compressed_size.unwrap_or(1) as f64
+                    / job.original_size.unwrap_or(1).max(1) as f64))
+                    * 100.0
+            } else {
+                0.0
+            };
+
+            log::info!("📤 Emitting completed event with compressed_size: {} bytes", job.compressed_size.unwrap_or(0));
+            let emit_result = app.emit("backup:progress", serde_json::json!({
+                "config_id": config_id,
+                "stage": "completed",
+                "message": format!("Backup completed! {} files", files_count),
+                "details": format!("{:.1} MB → {:.1} MB ({:.0}% compression)", original_mb, compressed_mb, compression_pct),
+                "current": files_count,
+                "total": files_count,
+                "original_size": job.original_size.unwrap_or(0),
+                "compressed_size": job.compressed_size.unwrap_or(0)
+            }));
+            log::info!("📤 Emit result: {:?}", emit_result);
+
+            // THEN: Build and save new manifest (this can take time for large directories)
             let (all_files, _) = backup::scan_all_files(source_path)?;
             let new_manifest = backup::build_manifest(&config_id, &all_files, source_path)?;
             let manifest_json = serde_json::to_string_pretty(&new_manifest)
@@ -280,12 +320,10 @@ pub async fn run_backup_now(
                 success: true,
                 message: format!(
                     "Backup completed: {} files, {:.2} MB → {:.2} MB ({:.1}% compression)",
-                    job.files_count.unwrap_or(0),
-                    job.original_size.unwrap_or(0) as f64 / 1_048_576.0,
-                    job.compressed_size.unwrap_or(0) as f64 / 1_048_576.0,
-                    (1.0 - (job.compressed_size.unwrap_or(1) as f64
-                        / job.original_size.unwrap_or(1).max(1) as f64))
-                        * 100.0
+                    files_count,
+                    original_mb,
+                    compressed_mb,
+                    compression_pct
                 ),
                 job: Some(job),
             })
@@ -484,27 +522,92 @@ pub async fn cancel_restore(
     }
 }
 
-/// Test a schedule now (open progress window and emit event)
+/// Test a schedule now (destroy and recreate progress window)
 #[tauri::command]
 pub async fn test_schedule_now(
     app: tauri::AppHandle,
     config_id: String,
 ) -> Result<String, String> {
+    use tauri::Manager;
+    use tauri::Listener;
+    use std::sync::Arc;
+    use tokio::sync::Notify;
+
     log::info!("Manual test requested for schedule: {}", config_id);
 
-    // Open scheduled-progress window
-    if let Some(window) = app.get_webview_window("scheduled-progress") {
-        let _ = window.show();
-        let _ = window.set_focus();
-        log::info!("Opened scheduled-progress window for test backup");
-    } else {
-        return Err("scheduled-progress window not found".to_string());
+    // Get config name for display in progress window
+    let config_name = {
+        let state = app.state::<AppState>();
+        let configs = state.configs.lock().map_err(|e| e.to_string())?;
+        configs.iter()
+            .find(|c| c.id == config_id)
+            .map(|c| c.name.clone())
+            .unwrap_or_else(|| "Unknown Backup".to_string())
+    };
+
+    // Destroy existing window if it exists
+    if let Some(old_window) = app.get_webview_window("scheduled-progress") {
+        log::info!("Destroying existing scheduled-progress window");
+        old_window.destroy().map_err(|e| format!("Failed to destroy window: {}", e))?;
+        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
     }
 
-    // Emit event to scheduled-progress window to trigger backup
-    let _ = app.emit_to("scheduled-progress", "test-backup-trigger", config_id.clone());
+    log::info!("Creating new scheduled-progress window");
 
-    Ok(format!("Test backup window opened for {}", config_id))
+    // Create notification channel for window-ready
+    let ready_notify = Arc::new(Notify::new());
+    let ready_clone = ready_notify.clone();
+
+    // Create new window dynamically with pure HTML (no React)
+    let window = tauri::WebviewWindowBuilder::new(
+        &app,
+        "scheduled-progress",
+        tauri::WebviewUrl::App("progress.html".into())
+    )
+    .title("Scheduled Backup - InLocker")
+    .inner_size(600.0, 450.0)
+    .center()
+    .resizable(false)
+    .visible(false)
+    .build()
+    .map_err(|e| format!("Failed to create window: {}", e))?;
+
+    // Setup listener for window-ready
+    let unlisten_handle = window.listen("window-ready", move |event| {
+        let payload = event.payload();
+        log::info!("Received window-ready: {}", payload);
+        if payload.contains("\"label\":\"scheduled-progress\"") {
+            ready_clone.notify_one();
+        }
+    });
+
+    log::info!("Waiting for window-ready event...");
+
+    // Wait for window-ready (timeout 3s)
+    let timeout = tokio::time::Duration::from_secs(3);
+    let wait_result = tokio::time::timeout(timeout, ready_notify.notified()).await;
+
+    app.unlisten(unlisten_handle);
+
+    if wait_result.is_err() {
+        log::warn!("Timeout waiting for window-ready");
+    }
+
+    // Show window
+    window.show().map_err(|e| format!("Failed to show: {}", e))?;
+    window.set_focus().map_err(|e| format!("Failed to focus: {}", e))?;
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    // Emit backup trigger with config info
+    log::info!("Emitting test-backup-trigger for: {} ({})", config_name, config_id);
+    app.emit_to("scheduled-progress", "test-backup-trigger", serde_json::json!({
+        "config_id": config_id,
+        "config_name": config_name
+    }))
+    .map_err(|e| format!("Failed to emit: {}", e))?;
+
+    Ok(format!("Test backup started for {}", config_id))
 }
 
 /// Check if app is running in scheduled/CLI mode
@@ -706,4 +809,38 @@ pub async fn diagnose_schedule(
 
     log::info!("Diagnostics results: {:?}", diagnostics);
     Ok(diagnostics)
+}
+
+/// Load application preferences
+#[tauri::command]
+pub async fn load_preferences(app: AppHandle) -> Result<AppPreferences, String> {
+    let prefs_path = get_preferences_path(&app)?;
+
+    if prefs_path.exists() {
+        let json = fs::read_to_string(&prefs_path)
+            .map_err(|e| format!("Failed to read preferences: {}", e))?;
+        let prefs: AppPreferences = serde_json::from_str(&json)
+            .map_err(|e| format!("Failed to parse preferences: {}", e))?;
+        Ok(prefs)
+    } else {
+        // Return defaults if no preferences file exists
+        Ok(AppPreferences::default())
+    }
+}
+
+/// Save application preferences
+#[tauri::command]
+pub async fn save_preferences(
+    app: AppHandle,
+    preferences: AppPreferences,
+) -> Result<AppPreferences, String> {
+    let prefs_path = get_preferences_path(&app)?;
+
+    let json = serde_json::to_string_pretty(&preferences)
+        .map_err(|e| format!("Failed to serialize preferences: {}", e))?;
+    fs::write(&prefs_path, json)
+        .map_err(|e| format!("Failed to write preferences: {}", e))?;
+
+    log::info!("Saved preferences: {:?}", preferences);
+    Ok(preferences)
 }

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2025-11-30
+
+### Bug Fixes
+
+- **backup:** improve progress tracking and completed event timing
+
+  - Add original_size and compressed_size to BackupProgress struct
+  - Emit size data during compression stages
+  - Move completed event emission before slow manifest scan
+  - Fix progress window appearing stuck on checksum stage
+
 ## [0.7.1] - 2025-11-30
 
 ### Bug Fixes

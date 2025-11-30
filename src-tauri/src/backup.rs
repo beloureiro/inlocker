@@ -16,9 +16,11 @@ pub struct BackupProgress {
     pub stage: String,
     pub message: String,
     pub details: Option<String>,
-    pub current: Option<usize>,  // Files processed so far
-    pub total: Option<usize>,     // Total files to process
-    pub started_at: Option<u64>,  // Unix timestamp when backup actually started (backend)
+    pub current: Option<usize>,      // Files processed so far
+    pub total: Option<usize>,        // Total files to process
+    pub started_at: Option<u64>,     // Unix timestamp when backup actually started (backend)
+    pub original_size: Option<u64>,  // Original size in bytes
+    pub compressed_size: Option<u64>, // Compressed size in bytes
 }
 
 /// Backup a folder with support for 3 modes: Copy, Compressed, or Encrypted
@@ -49,8 +51,8 @@ pub fn compress_folder(
         .unwrap()
         .as_secs();
 
-    // Helper to emit progress
-    let emit_progress = |stage: &str, message: &str, details: Option<String>, current: Option<usize>, total: Option<usize>| {
+    // Helper to emit progress with size info
+    let emit_progress = |stage: &str, message: &str, details: Option<String>, current: Option<usize>, total: Option<usize>, orig_size: Option<u64>, comp_size: Option<u64>| {
         if let Some(app_handle) = app {
             let _ = app_handle.emit("backup:progress", BackupProgress {
                 config_id: config_id.to_string(),
@@ -60,6 +62,8 @@ pub fn compress_folder(
                 current,
                 total,
                 started_at: Some(started_at),
+                original_size: orig_size,
+                compressed_size: comp_size,
             });
         }
     };
@@ -82,7 +86,7 @@ pub fn compress_folder(
     log::info!("📂 Source: {}", source_path.display());
     log::info!("💾 Destination: {}", dest_path.display());
 
-    emit_progress("starting", "Starting backup", None, None, None);
+    emit_progress("starting", "Starting backup", None, None, None, None, None);
     check_cancelled()?;
 
     let started_at = SystemTime::now()
@@ -94,7 +98,7 @@ pub fn compress_folder(
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
 
     log::info!("📋 Scanning files...");
-    emit_progress("scanning", "Scanning files", None, None, None);
+    emit_progress("scanning", "Scanning files", None, None, None, None, None);
 
     // Scan ALL files first (for comparison)
     let (all_files, total_source_size) = scan_all_files(source_path)?;
@@ -121,7 +125,9 @@ pub fn compress_folder(
         &format!("Found {} files", files_count),
         Some(format!("{:.1} MB", total_size as f64 / 1_048_576.0)),
         Some(0),
-        Some(files_count)
+        Some(files_count),
+        Some(total_size),
+        None
     );
     check_cancelled()?;
 
@@ -155,7 +161,7 @@ pub fn compress_folder(
     // Handle Copy mode separately (direct copy, no TAR, no compression)
     if mode == &BackupMode::Copy {
         log::info!("📋 Copy mode - copying files directly (no TAR, no compression)");
-        emit_progress("copying", "Copying files directly", Some(format!("{} files", files_count)), Some(0), Some(files_count));
+        emit_progress("copying", "Copying files directly", Some(format!("{} files", files_count)), Some(0), Some(files_count), Some(total_size), None);
 
         // Create backup folder
         fs::create_dir_all(&backup_path)
@@ -185,7 +191,7 @@ pub fn compress_folder(
 
                 // Emit progress every 10 files
                 if copied_count % 10 == 0 {
-                    emit_progress("copying", "Copying files directly", Some(format!("{} files", copied_count)), Some(copied_count), Some(files_count));
+                    emit_progress("copying", "Copying files directly", Some(format!("{} files", copied_count)), Some(copied_count), Some(files_count), Some(total_size), None);
                 }
             }
             Ok(copied_count)
@@ -228,7 +234,7 @@ pub fn compress_folder(
 
     // For Compressed and Encrypted modes: Create TAR archive with streaming compression
     log::info!("📦 Creating TAR archive with streaming compression...");
-    emit_progress("creating_tar", "Creating TAR archive", Some(format!("{} files", files_count)), Some(0), Some(files_count));
+    emit_progress("creating_tar", "Creating TAR archive", Some(format!("{} files", files_count)), Some(0), Some(files_count), Some(total_size), None);
 
     // Ensure destination directory exists
     fs::create_dir_all(dest_path).map_err(|e| format!("Failed to create dest dir: {}", e))?;
@@ -236,7 +242,7 @@ pub fn compress_folder(
     // For Compressed mode: Write TAR directly to streaming zstd encoder
     let compressed_size = if mode == &BackupMode::Compressed {
         log::info!("🗜️  Streaming TAR + zstd compression (level 3)...");
-        emit_progress("compressing", "Compressing with zstd", Some(format!("{} files", files_count)), Some(0), Some(files_count));
+        emit_progress("compressing", "Streaming TAR + zstd", Some(format!("{} files", files_count)), Some(0), Some(files_count), Some(total_size), None);
 
         // Create streaming encoder that writes directly to file
         let output_file = fs::File::create(&backup_path)
@@ -257,7 +263,9 @@ pub fn compress_folder(
                     "Streaming TAR + zstd",
                     Some(format!("{} files", current)),
                     Some(current),
-                    Some(total)
+                    Some(total),
+                    Some(total_size),
+                    None
                 );
             }
         );
@@ -285,7 +293,7 @@ pub fn compress_folder(
         // This prevents UI from showing progress when backup will fail immediately
         let pwd = password.ok_or("Encryption enabled but no password provided")?;
 
-        emit_progress("compressing", "Compressing and encrypting", Some(format!("{} files", files_count)), Some(0), Some(files_count));
+        emit_progress("compressing", "Compressing and encrypting", Some(format!("{} files", files_count)), Some(0), Some(files_count), Some(total_size), None);
 
         // Create temporary file for compressed data (before encryption)
         let temp_compressed = backup_path.with_extension("tmp.zst");
@@ -309,7 +317,9 @@ pub fn compress_folder(
                     "Streaming TAR + zstd",
                     Some(format!("{} files", current)),
                     Some(current),
-                    Some(total)
+                    Some(total),
+                    Some(total_size),
+                    None
                 );
             }
         );
@@ -330,7 +340,7 @@ pub fn compress_folder(
 
         // Step 2: Encrypt the compressed data
         log::info!("🔐 Encrypting with AES-256-GCM...");
-        emit_progress("encrypting", "Encrypting backup", Some(format!("{:.1} MB", compressed_size as f64 / 1_048_576.0)), None, None);
+        emit_progress("encrypting", "Encrypting backup", Some(format!("{:.1} MB", compressed_size as f64 / 1_048_576.0)), None, None, Some(total_size), Some(compressed_size));
 
         let encryption_result = (|| -> Result<u64, String> {
             // Read compressed data
@@ -377,7 +387,7 @@ pub fn compress_folder(
 
     // Calculate checksum
     log::info!("🔒 Calculating SHA-256 checksum...");
-    emit_progress("checksum", "Calculating checksum", None, None, None);
+    emit_progress("checksum", "Calculating checksum", None, None, None, Some(total_size), Some(compressed_size));
     let checksum = match calculate_checksum(&backup_path) {
         Ok(sum) => sum,
         Err(e) => {
