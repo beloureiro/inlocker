@@ -55,6 +55,9 @@ coverage/
 config/user-config.json
 backups/
 CLAUDE.md
+.claude/
+docs/
+scripts/
 
 # InLog - Changelog automation
 .changelog-lock
