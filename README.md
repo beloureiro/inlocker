@@ -87,34 +87,17 @@ InLocker creates different outputs depending on your chosen mode:
 
 ---
 
-## documentation
+## download
 
-Complete documentation is organized in `/docs`:
+**Website:** [inlocker.app](https://inlocker.app)
 
-1. **[quickstart guide](docs/05-quickstart/README.md)** 🚀
-   - Setup in 5 minutes
-   - First backup tutorial
+Download the latest version, view screenshots, and get support at our official website.
 
-2. **[developer guide](docs/02-development/03-dev-guide.md)** 👨‍💻
-   - Development commands
-   - Architecture overview
-   - Building from source
-   - Troubleshooting
+---
 
-3. **[roadmap](docs/02-development/01-roadmap.md)** 📋
-   - Implementation progress (99% complete)
-   - Testing strategy (78 tests)
-   - Next steps
+## changelog
 
-4. **[value proposition](docs/01-planning/01-value-proposition.md)** 💡
-   - Why InLocker?
-   - Battle-tested quality
-   - Competitive advantages
-
-5. **[changelog](CHANGELOG.md)** 📝
-   - Version history
-   - Recent updates
-   - Automated with InLog system
+See [CHANGELOG.md](CHANGELOG.md) for version history and recent updates.
 
 ---
 
@@ -191,10 +174,9 @@ Integration Tests:                   71 tests
 ## quick start
 
 ### for end users
-See [docs/07-user-guide.md](docs/07-user-guide.md) for a complete guide.
+Download from [inlocker.app](https://inlocker.app) and follow the in-app instructions.
 
 ### for developers
-See [docs/05-quickstart.md](docs/05-quickstart.md) for detailed setup.
 
 ```bash
 # Clone repository
@@ -249,7 +231,7 @@ InLocker takes security seriously:
 - **Hardened:** Protection against path traversal, timing attacks, tampering
 - **No Network:** All data stays local, no telemetry or cloud sync
 
-See [roadmap](docs/02-development/01-roadmap.md) for complete testing strategy and security test coverage.
+See test coverage section above for security test details.
 
 ---
 
@@ -278,7 +260,8 @@ This project is in final MVP development. Contributions will be welcome after v1
 
 ## contact
 
-Issues: [GitHub Issues](https://github.com/beloureiro/inlocker/issues)
+- **Website:** [inlocker.app](https://inlocker.app)
+- **Issues:** [GitHub Issues](https://github.com/beloureiro/inlocker/issues)
 
 ---
 
