@@ -26,6 +26,7 @@ export function BackupList() {
   const [passwordPrompt, setPasswordPrompt] = useState<{ configId: string; show: boolean }>({ configId: '', show: false });
   const [passwordInput, setPasswordInput] = useState('');
   const [backupFileExists, setBackupFileExists] = useState<Map<string, boolean>>(new Map());
+  const [testingSchedule, setTestingSchedule] = useState<Set<string>>(new Set());
 
   // Debounce loadConfigs to avoid multiple re-renders during parallel backups
   const loadConfigsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -609,43 +610,73 @@ export function BackupList() {
                       Settings
                     </button>
 
-                    {/* Schedule diagnostic buttons */}
-                    {config.schedule?.enabled && config.schedule?.cron_expression && (
-                      <>
+                    {/* Test Now button - enabled only for scheduled backups */}
+                    {(() => {
+                      const hasSchedule = config.schedule?.enabled && config.schedule?.cron_expression;
+                      const isTesting = testingSchedule.has(config.id);
+                      return (
                         <button
                           onClick={async () => {
+                            if (!hasSchedule) return;
+                            setTestingSchedule(prev => new Set(prev).add(config.id));
                             try {
                               const message = await invoke<string>('test_schedule_now', { configId: config.id });
-                              alert(message);
+                              // Don't show alert - progress window handles feedback
+                              console.log('[BackupList] Test schedule response:', message);
                             } catch (error) {
                               alert(`Test failed: ${error}`);
+                            } finally {
+                              // Remove loading state after a short delay to allow window to open
+                              setTimeout(() => {
+                                setTestingSchedule(prev => {
+                                  const next = new Set(prev);
+                                  next.delete(config.id);
+                                  return next;
+                                });
+                              }, 1000);
                             }
                           }}
-                          className="px-3 py-1 text-xs text-blue-300 hover:text-blue-200 hover:bg-blue-900/20 rounded transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
-                          title="Test scheduled backup now"
+                          disabled={!hasSchedule || isTesting}
+                          className={`px-3 py-1 text-xs rounded transition-colors flex items-center justify-center gap-1 whitespace-nowrap ${
+                            hasSchedule
+                              ? 'text-blue-300 hover:text-blue-200 hover:bg-blue-900/20'
+                              : 'text-gray-500 cursor-not-allowed'
+                          }`}
+                          title={hasSchedule ? "Test scheduled backup now" : "Enable a schedule in Settings to use Test Now"}
                         >
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
-                          </svg>
-                          Test Now
+                          {isTesting ? (
+                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          ) : (
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+                            </svg>
+                          )}
+                          {isTesting ? 'Opening...' : 'Test Now'}
                         </button>
-                        <button
-                          onClick={async () => {
-                            try {
-                              await invoke('open_schedule_logs', { configId: config.id });
-                            } catch (error) {
-                              alert(`Failed to open logs: ${error}`);
-                            }
-                          }}
-                          className="px-3 py-1 text-xs text-gray-300 hover:text-white hover:bg-gray-800 rounded transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
-                          title="View schedule logs"
-                        >
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                          </svg>
-                          Logs
-                        </button>
-                      </>
+                      );
+                    })()}
+
+                    {/* Logs button - only for scheduled backups */}
+                    {config.schedule?.enabled && config.schedule?.cron_expression && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            await invoke('open_schedule_logs', { configId: config.id });
+                          } catch (error) {
+                            alert(`Failed to open logs: ${error}`);
+                          }
+                        }}
+                        className="px-3 py-1 text-xs text-gray-300 hover:text-white hover:bg-gray-800 rounded transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
+                        title="View schedule logs"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                        </svg>
+                        Logs
+                      </button>
                     )}
 
                     <button

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.3] - 2025-11-30
+
+### Bug Fixes
+
+- **ui:** improve Test Now button and minor UI fixes
+
+  - Add spinner feedback while opening progress window
+  - Show disabled state with tooltip for non-scheduled backups
+  - Make Test Now button visible on all cards for consistency
+  - Minor UI adjustments in FolderSelector and App
+
 ## [0.7.2] - 2025-11-30
 
 ### Bug Fixes

@@ -37,7 +37,7 @@ export function FolderSelector({ onFolderSelected }: FolderSelectorProps) {
   return (
     <div className="bg-gray-900 rounded-lg border border-gray-800 p-3">
       <h2 className="text-base font-semibold mb-2">
-        Add New Backup <span className="text-xs text-gray-400 font-normal">(Tip: Cmd+Shift+. shows hidden folders)</span>
+        Add New Backup <span className="text-xs text-gray-400 font-normal">(Tip: Press "Cmd+Shift+Period" to show hidden folders)</span>
       </h2>
 
       <div className="grid grid-cols-2 gap-2 mb-2">
