@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2025-11-30
+
+### Features
+
+- **settings:** add app preferences with auto-close option
+
+  - Add AppPreferences struct with auto_close_progress_window setting
+  - Add load_preferences and save_preferences commands
+  - Create usePreferencesStore for frontend state management
+  - Add PreferencesModal component with toggle
+  - Add settings gear icon in Layout header
+
 ## [0.6.5] - 2025-11-23
 
 ### Bug Fixes

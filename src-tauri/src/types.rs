@@ -135,6 +135,34 @@ pub struct FileMetadata {
     pub checksum: String,
 }
 
+/// Application preferences
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppPreferences {
+    /// Whether to auto-close the progress window after scheduled backup completes
+    #[serde(default = "default_auto_close")]
+    pub auto_close_progress_window: bool,
+    /// Auto-close delay in milliseconds (default: 3000ms = 3 seconds)
+    #[serde(default = "default_auto_close_delay")]
+    pub auto_close_delay_ms: u32,
+}
+
+fn default_auto_close() -> bool {
+    true
+}
+
+fn default_auto_close_delay() -> u32 {
+    3000
+}
+
+impl Default for AppPreferences {
+    fn default() -> Self {
+        Self {
+            auto_close_progress_window: true,
+            auto_close_delay_ms: 3000,
+        }
+    }
+}
+
 /// Diagnostics for a scheduled backup
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScheduleDiagnostics {
