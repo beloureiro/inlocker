@@ -36,13 +36,26 @@ export function PreferencesModal({ onClose }: PreferencesModalProps) {
             <h3 className="text-sm font-medium text-gray-300 uppercase tracking-wide">Scheduled Backup</h3>
 
             <label className="flex items-start gap-3 cursor-pointer group">
-              <input
-                type="checkbox"
-                checked={preferences.auto_close_progress_window}
-                onChange={handleAutoCloseChange}
-                disabled={isLoading}
-                className="mt-0.5 w-4 h-4 rounded border-gray-600 bg-gray-800 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
-              />
+              <div className="relative flex items-center justify-center mt-0.5">
+                <input
+                  type="checkbox"
+                  checked={preferences.auto_close_progress_window}
+                  onChange={handleAutoCloseChange}
+                  disabled={isLoading}
+                  className="sr-only peer"
+                />
+                <div className={`w-5 h-5 rounded border-2 transition-all flex items-center justify-center ${
+                  preferences.auto_close_progress_window
+                    ? 'border-emerald-600 bg-emerald-600'
+                    : 'border-gray-600 bg-gray-800 group-hover:border-gray-500'
+                } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                  {preferences.auto_close_progress_window && (
+                    <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </div>
+              </div>
               <div className="flex-1">
                 <span className="text-sm text-gray-200 group-hover:text-white transition-colors">
                   Auto-close progress window

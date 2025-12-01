@@ -214,22 +214,43 @@
     const compressedSizeEl = document.getElementById('compressed-size');
 
     // Preferences (loaded from backend)
-    let autoCloseEnabled = true;
+    let autoCloseEnabled = false;
     let autoCloseDelay = 3000;
 
     // Load preferences from backend
     try {
+      console.log('[progress.html] Loading preferences...');
       const prefs = await invoke('load_preferences');
-      autoCloseEnabled = prefs.auto_close_progress_window;
-      autoCloseDelay = prefs.auto_close_delay_ms;
-      console.log('[progress.html] Loaded preferences:', { autoCloseEnabled, autoCloseDelay });
+      console.log('[progress.html] Raw preferences response:', prefs);
+
+      if (prefs && typeof prefs.auto_close_progress_window !== 'undefined') {
+        autoCloseEnabled = prefs.auto_close_progress_window;
+        autoCloseDelay = prefs.auto_close_delay_ms || 3000;
+        console.log('[progress.html] Successfully loaded preferences:', {
+          autoCloseEnabled,
+          autoCloseDelay,
+          type: typeof autoCloseEnabled
+        });
+      } else {
+        console.error('[progress.html] Invalid preferences response:', prefs);
+        autoCloseEnabled = true;
+      }
 
       // Update footer text based on preference
       if (!autoCloseEnabled) {
         footer.textContent = 'Close this window manually when done';
+      } else {
+        footer.textContent = 'Window will close automatically when complete';
       }
     } catch (err) {
-      console.warn('[progress.html] Failed to load preferences, using defaults:', err);
+      console.error('[progress.html] FAILED to load preferences:', err);
+      console.error('[progress.html] Error details:', {
+        message: err.message,
+        stack: err.stack,
+        toString: err.toString()
+      });
+      autoCloseEnabled = true;
+      footer.textContent = 'Window will close automatically when complete (using default)';
     }
 
     // Timer state

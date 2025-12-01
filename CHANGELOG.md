@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.4] - 2025-12-01
+
+### Bug Fixes
+
+- preferences modal checkbox design and auto-close behavior in production
+
+  - Replace native checkbox with custom design matching app UI pattern
+  - Improve error handling in progress.html for preferences loading
+  - Add detailed debug logs to load_preferences command
+  - Fix scheduled-progress window permissions configuration
+  - Change default auto-close to false when preferences fail to load
+
 ## [0.7.3] - 2025-11-30
 
 ### Bug Fixes

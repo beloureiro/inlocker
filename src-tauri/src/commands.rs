@@ -814,17 +814,29 @@ pub async fn diagnose_schedule(
 /// Load application preferences
 #[tauri::command]
 pub async fn load_preferences(app: AppHandle) -> Result<AppPreferences, String> {
+    log::info!("load_preferences called");
     let prefs_path = get_preferences_path(&app)?;
+    log::info!("Preferences path: {:?}", prefs_path);
 
     if prefs_path.exists() {
+        log::info!("Preferences file exists, reading...");
         let json = fs::read_to_string(&prefs_path)
-            .map_err(|e| format!("Failed to read preferences: {}", e))?;
+            .map_err(|e| {
+                log::error!("Failed to read preferences file: {}", e);
+                format!("Failed to read preferences: {}", e)
+            })?;
         let prefs: AppPreferences = serde_json::from_str(&json)
-            .map_err(|e| format!("Failed to parse preferences: {}", e))?;
+            .map_err(|e| {
+                log::error!("Failed to parse preferences JSON: {}", e);
+                format!("Failed to parse preferences: {}", e)
+            })?;
+        log::info!("Successfully loaded preferences: {:?}", prefs);
         Ok(prefs)
     } else {
-        // Return defaults if no preferences file exists
-        Ok(AppPreferences::default())
+        log::info!("Preferences file does not exist, returning defaults");
+        let defaults = AppPreferences::default();
+        log::info!("Default preferences: {:?}", defaults);
+        Ok(defaults)
     }
 }
 
