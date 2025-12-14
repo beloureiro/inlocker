@@ -1,4 +1,5 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
+import { getVersion } from '@tauri-apps/api/app';
 import { PreferencesModal } from './PreferencesModal';
 
 interface LayoutProps {
@@ -7,6 +8,11 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
   const [showPreferences, setShowPreferences] = useState(false);
+  const [appVersion, setAppVersion] = useState<string>('');
+
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(() => setAppVersion(''));
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -22,7 +28,12 @@ export function Layout({ children }: LayoutProps) {
                 className="w-12 h-12 rounded-xl shadow-lg"
               />
               <div>
-                <h1 className="text-xl font-bold">InLocker</h1>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-bold">InLocker</h1>
+                  {appVersion && (
+                    <span className="text-xs text-gray-500 font-normal">v{appVersion}</span>
+                  )}
+                </div>
                 <p className="text-xs text-gray-400">Automatic, compressed, and secure backups</p>
               </div>
             </div>

@@ -193,6 +193,16 @@ pnpm tauri dev
 cd src-tauri && cargo test --all
 ```
 
+### building for production
+
+```bash
+pnpm tauri build
+```
+
+Output files:
+- `.app`: `src-tauri/target/release/bundle/macos/InLocker.app`
+- `.dmg`: `src-tauri/target/release/bundle/dmg/InLocker_VERSION_aarch64.dmg`
+
 ---
 
 ## roadmap
@@ -243,6 +253,32 @@ See test coverage section above for security test details.
 - ⏳ Startup time: <500ms (to be validated)
 - ⏳ 1GB backup: <2 minutes (implemented, to be validated)
 - ⏳ Memory usage: <500MB for 10GB backup (to be validated)
+
+---
+
+## open-source notice
+
+InLocker is a **free, open-source project** distributed without an Apple Developer certificate.
+
+### what this means:
+
+- **No cost**: The app is free to use and modify
+- **Ad-hoc signed**: The app uses ad-hoc code signing (no Apple Developer Program membership)
+- **Gatekeeper warning**: On first launch, you may need to right-click and select "Open" to bypass Gatekeeper
+- **Not notarized**: The app is not notarized by Apple since that requires a paid developer account
+
+### why no Apple Developer certificate?
+
+Apple charges $99/year for the Developer Program membership required to properly sign and notarize apps. Since InLocker is:
+- Free and open-source
+- Not sold commercially
+- A personal/community project
+
+Paying for code signing would not be sustainable. The app is fully functional without it.
+
+### scheduler workaround
+
+Due to macOS Sequoia 15.x+ security restrictions, scheduled backups use a shell wrapper script instead of direct binary execution. This is a documented workaround for ad-hoc signed apps running via launchd. Technical details available upon request.
 
 ---
 

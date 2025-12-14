@@ -7,8 +7,31 @@ pub mod types;
 
 use commands::AppState;
 use scheduler::SchedulerState;
-use types::BackupConfig;
-use tauri::{Emitter, Listener, Manager};
+use types::{AppPreferences, BackupConfig};
+use tauri::{AppHandle, Emitter, Listener, Manager};
+
+/// Load preferences from disk (helper for lib.rs)
+fn load_preferences_sync(app: &AppHandle) -> AppPreferences {
+    let prefs_path = app
+        .path()
+        .app_data_dir()
+        .map(|p| p.join("preferences.json"))
+        .ok();
+
+    if let Some(path) = prefs_path {
+        if path.exists() {
+            if let Ok(json) = std::fs::read_to_string(&path) {
+                if let Ok(prefs) = serde_json::from_str::<AppPreferences>(&json) {
+                    log::info!("Loaded preferences for auto-close check: {:?}", prefs);
+                    return prefs;
+                }
+            }
+        }
+    }
+
+    log::info!("Using default preferences (auto_close: false for safety)");
+    AppPreferences::default_safe()
+}
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -69,14 +92,61 @@ pub fn run() {
             let is_cli_backup = argv.len() >= 3 && argv.get(1).map(|s| s.as_str()) == Some("--backup");
 
             if is_cli_backup {
-                // CLI mode: open scheduled progress window
-                log::info!("Single instance detected with --backup arg, opening scheduled-progress window");
-                if let Some(window) = app.get_webview_window("scheduled-progress") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                } else {
-                    log::warn!("scheduled-progress window not found, attempting to create");
-                }
+                // CLI mode: run backup from existing instance
+                let config_id = argv.get(2).cloned().unwrap_or_default();
+                log::info!("Single instance: running scheduled backup for {} from existing instance", config_id);
+
+                // Create progress window and run backup in existing instance
+                let app_handle = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    // Create scheduled-progress window dynamically
+                    match tauri::WebviewWindowBuilder::new(
+                        &app_handle,
+                        "scheduled-progress",
+                        tauri::WebviewUrl::App("progress.html".into())
+                    )
+                    .title("Scheduled Backup - InLocker")
+                    .inner_size(600.0, 450.0)
+                    .center()
+                    .resizable(false)
+                    .visible(true)
+                    .build() {
+                        Ok(window) => {
+                            log::info!("Created scheduled-progress window for single-instance backup");
+                            let _ = window.set_focus();
+                        }
+                        Err(e) => {
+                            log::error!("Failed to create scheduled-progress window: {}", e);
+                        }
+                    }
+
+                    // Wait for window to be ready
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+                    // Run the backup
+                    match run_scheduled_backup_static(&app_handle, &config_id).await {
+                        Ok(_) => {
+                            log::info!("Single-instance scheduled backup completed successfully");
+
+                            // Check user preference before closing
+                            let prefs = load_preferences_sync(&app_handle);
+                            if prefs.auto_close_progress_window {
+                                log::info!("Auto-close enabled, closing window after {}ms", prefs.auto_close_delay_ms);
+                                tokio::time::sleep(tokio::time::Duration::from_millis(prefs.auto_close_delay_ms as u64)).await;
+                                if let Some(window) = app_handle.get_webview_window("scheduled-progress") {
+                                    let _ = window.close();
+                                }
+                            } else {
+                                log::info!("Auto-close disabled, keeping window open");
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("Single-instance scheduled backup failed: {}", e);
+                            // On error, always keep window open for user to see the error
+                            log::info!("Keeping window open due to error");
+                        }
+                    }
+                });
             } else {
                 // Normal mode: focus existing main window
                 log::info!("Single instance detected, focusing existing main window");
@@ -309,6 +379,7 @@ async fn run_scheduled_backup(app: &tauri::AppHandle, config_id: &str) -> Result
     // TODO: Add password parameter when CLI supports it
     match backup::compress_folder(
         &config_id,
+        &config.name,
         source_path,
         dest_path,
         &config.backup_type,
@@ -392,6 +463,11 @@ fn send_notification(app: &tauri::AppHandle, title: &str, body: &str) {
     {
         log::error!("Failed to send notification: {}", e);
     }
+}
+
+/// Run a scheduled backup (static version for single-instance callback)
+async fn run_scheduled_backup_static(app: &tauri::AppHandle, config_id: &str) -> Result<(), String> {
+    run_scheduled_backup(app, config_id).await
 }
 
 /// Restore all schedules on app startup

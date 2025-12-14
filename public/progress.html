@@ -233,15 +233,9 @@
         });
       } else {
         console.error('[progress.html] Invalid preferences response:', prefs);
-        autoCloseEnabled = true;
+        autoCloseEnabled = false;
       }
 
-      // Update footer text based on preference
-      if (!autoCloseEnabled) {
-        footer.textContent = 'Close this window manually when done';
-      } else {
-        footer.textContent = 'Window will close automatically when complete';
-      }
     } catch (err) {
       console.error('[progress.html] FAILED to load preferences:', err);
       console.error('[progress.html] Error details:', {
@@ -249,8 +243,14 @@
         stack: err.stack,
         toString: err.toString()
       });
-      autoCloseEnabled = true;
-      footer.textContent = 'Window will close automatically when complete (using default)';
+      autoCloseEnabled = false;
+    }
+
+    // Update footer text based on preference (runs after try-catch)
+    if (!autoCloseEnabled) {
+      footer.textContent = 'Close this window manually when done';
+    } else {
+      footer.textContent = 'Window will close automatically when complete';
     }
 
     // Timer state
@@ -335,15 +335,18 @@
       // Completed state - auto close after delay (if enabled)
       if (data.stage === 'completed') {
         console.log('[progress.html] COMPLETED EVENT RECEIVED!', data);
+        console.log('[progress.html] Auto-close decision:', { autoCloseEnabled, autoCloseDelay });
         stopTimer();
         progressCard.classList.add('completed');
         spinner.style.display = 'none';
 
         if (autoCloseEnabled) {
+          console.log('[progress.html] AUTO-CLOSE IS ENABLED - will close window');
           footer.textContent = `Closing in ${autoCloseDelay / 1000} seconds...`;
 
           setTimeout(async () => {
             try {
+              console.log('[progress.html] Closing window now...');
               const window = getCurrentWindow();
               await window.close();
             } catch (err) {
@@ -351,6 +354,7 @@
             }
           }, autoCloseDelay);
         } else {
+          console.log('[progress.html] AUTO-CLOSE IS DISABLED - keeping window open');
           footer.textContent = 'Backup complete! Close this window manually';
         }
       }

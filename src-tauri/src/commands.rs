@@ -138,8 +138,11 @@ pub async fn delete_config(
     scheduler_state: State<'_, SchedulerState>,
     config_id: String,
 ) -> Result<bool, String> {
-    let was_deleted = {
+    let (was_deleted, config_name) = {
         let mut configs = state.configs.lock().map_err(|e| e.to_string())?;
+
+        // Save config name before deletion for wrapper script cleanup
+        let config_name = configs.iter().find(|c| c.id == config_id).map(|c| c.name.clone());
 
         let initial_len = configs.len();
         configs.retain(|c| c.id != config_id);
@@ -155,7 +158,7 @@ pub async fn delete_config(
                 .map_err(|e| format!("Failed to write configs: {}", e))?;
         }
 
-        deleted
+        (deleted, config_name)
     }; // Lock is released here
 
     if was_deleted {
@@ -164,7 +167,7 @@ pub async fn delete_config(
         let _ = scheduler_state.unregister_schedule(&config_id).await;
 
         // Uninstall launchd agent (ignore errors if not installed)
-        let _ = launchd::uninstall_launch_agent(&config_id);
+        let _ = launchd::uninstall_launch_agent(&config_id, config_name.as_deref());
 
         log::info!("Deleted config and cleaned up schedules: {}", config_id);
     }
@@ -242,6 +245,7 @@ pub async fn run_backup_now(
     // Perform backup with cancellation support
     let backup_result = backup::compress_folder(
         &config_id,
+        &config.name,
         source_path,
         dest_path,
         &config.backup_type,
@@ -288,33 +292,56 @@ pub async fn run_backup_now(
             }));
             log::info!("📤 Emit result: {:?}", emit_result);
 
-            // THEN: Build and save new manifest (this can take time for large directories)
-            let (all_files, _) = backup::scan_all_files(source_path)?;
-            let new_manifest = backup::build_manifest(&config_id, &all_files, source_path)?;
-            let manifest_json = serde_json::to_string_pretty(&new_manifest)
-                .map_err(|e| format!("Failed to serialize manifest: {}", e))?;
-            fs::write(&manifest_path, manifest_json)
-                .map_err(|e| format!("Failed to save manifest: {}", e))?;
-
-            // Update config's last_backup_at and size info
-            let mut configs = state.configs.lock().map_err(|e| e.to_string())?;
-            if let Some(cfg) = configs.iter_mut().find(|c| c.id == config_id) {
-                cfg.last_backup_at = Some(job.completed_at.unwrap_or(0));
-                cfg.last_backup_original_size = job.original_size;
-                cfg.last_backup_compressed_size = job.compressed_size;
-                cfg.last_backup_files_count = job.files_count;
-                cfg.last_backup_checksum = job.checksum.clone();
-                cfg.updated_at = job.completed_at.unwrap_or(0);
+            // Update config's last_backup_at and size info (fast - do immediately)
+            {
+                let mut configs = state.configs.lock().map_err(|e| e.to_string())?;
+                if let Some(cfg) = configs.iter_mut().find(|c| c.id == config_id) {
+                    cfg.last_backup_at = Some(job.completed_at.unwrap_or(0));
+                    cfg.last_backup_original_size = job.original_size;
+                    cfg.last_backup_compressed_size = job.compressed_size;
+                    cfg.last_backup_files_count = job.files_count;
+                    cfg.last_backup_checksum = job.checksum.clone();
+                    cfg.updated_at = job.completed_at.unwrap_or(0);
+                }
             }
-            drop(configs);
 
-            // Persist configs
-            let config_path = get_config_path(&app)?;
-            let configs = state.configs.lock().map_err(|e| e.to_string())?;
-            let json = serde_json::to_string_pretty(&*configs)
-                .map_err(|e| format!("Failed to serialize configs: {}", e))?;
-            fs::write(&config_path, json)
-                .map_err(|e| format!("Failed to write configs: {}", e))?;
+            // Persist configs (fast - do immediately)
+            {
+                let config_path = get_config_path(&app)?;
+                let configs = state.configs.lock().map_err(|e| e.to_string())?;
+                let json = serde_json::to_string_pretty(&*configs)
+                    .map_err(|e| format!("Failed to serialize configs: {}", e))?;
+                fs::write(&config_path, json)
+                    .map_err(|e| format!("Failed to write configs: {}", e))?;
+            }
+
+            // Build and save manifest in background (slow - don't block UI)
+            let manifest_config_id = config_id.clone();
+            let manifest_source = source_path.to_path_buf();
+            let manifest_dest = manifest_path.clone();
+            tokio::spawn(async move {
+                log::info!("📋 Building manifest in background for {}", manifest_config_id);
+                match backup::scan_all_files(&manifest_source) {
+                    Ok((all_files, _)) => {
+                        match backup::build_manifest(&manifest_config_id, &all_files, &manifest_source) {
+                            Ok(new_manifest) => {
+                                match serde_json::to_string_pretty(&new_manifest) {
+                                    Ok(manifest_json) => {
+                                        if let Err(e) = fs::write(&manifest_dest, manifest_json) {
+                                            log::error!("Failed to save manifest: {}", e);
+                                        } else {
+                                            log::info!("✅ Manifest saved in background");
+                                        }
+                                    }
+                                    Err(e) => log::error!("Failed to serialize manifest: {}", e),
+                                }
+                            }
+                            Err(e) => log::error!("Failed to build manifest: {}", e),
+                        }
+                    }
+                    Err(e) => log::error!("Failed to scan files for manifest: {}", e),
+                }
+            });
 
             Ok(BackupResult {
                 success: true,
@@ -383,7 +410,7 @@ pub async fn register_schedule(
     // Get app executable path (handles both dev and production)
     let app_path = launchd::get_executable_path()?;
 
-    launchd::install_launch_agent(&config_id, cron_expr, &app_path)?;
+    launchd::install_launch_agent(&config_id, &config.name, cron_expr, &app_path)?;
 
     log::info!(
         "Registered schedule for config {} (launchd)",
@@ -397,12 +424,19 @@ pub async fn register_schedule(
 #[tauri::command]
 pub async fn unregister_schedule(
     scheduler_state: State<'_, SchedulerState>,
+    state: State<'_, AppState>,
     config_id: String,
 ) -> Result<bool, String> {
     let _ = scheduler_state; // Suppress unused warning
 
+    // Get config name for wrapper script deletion
+    let config_name = {
+        let configs = state.configs.lock().map_err(|e| e.to_string())?;
+        configs.iter().find(|c| c.id == config_id).map(|c| c.name.clone())
+    };
+
     // Uninstall launchd agent
-    launchd::uninstall_launch_agent(&config_id)?;
+    launchd::uninstall_launch_agent(&config_id, config_name.as_deref())?;
 
     log::info!(
         "Unregistered schedule for config {} (launchd)",

@@ -34,8 +34,18 @@ pub struct BackupProgress {
 /// - If mode is Encrypted, backup is encrypted with AES-256-GCM
 /// - Encryption metadata (salt, nonce) is embedded in the file
 /// - Password is derived using Argon2id (RFC 9106)
+/// Sanitize config name for use in filename (remove special characters)
+fn sanitize_filename(name: &str) -> String {
+    name.chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string()
+}
+
 pub fn compress_folder(
     config_id: &str,
+    config_name: &str,
     source_path: &Path,
     dest_path: &Path,
     backup_type: &BackupType,
@@ -139,19 +149,17 @@ pub fn compress_folder(
         "incr"
     };
 
-    // Generate backup filename with InLocker branding
+    // Generate backup filename with InLocker branding and config name
+    let safe_name = sanitize_filename(config_name);
     let backup_filename = match mode {
         BackupMode::Copy => {
-            // Copy mode: folder name (no extension)
-            format!("Bkp_InLocker_{}_{}", actual_backup_type, timestamp)
+            format!("Bkp_InLocker_{}_{}_{}", safe_name, actual_backup_type, timestamp)
         },
         BackupMode::Compressed => {
-            // Compressed: .tar.zst file
-            format!("Bkp_InLocker_{}_{}.tar.zst", actual_backup_type, timestamp)
+            format!("Bkp_InLocker_{}_{}_{}.tar.zst", safe_name, actual_backup_type, timestamp)
         },
         BackupMode::Encrypted => {
-            // Encrypted: .tar.zst.enc file
-            format!("Bkp_InLocker_{}_{}.tar.zst.enc", actual_backup_type, timestamp)
+            format!("Bkp_InLocker_{}_{}_{}.tar.zst.enc", safe_name, actual_backup_type, timestamp)
         }
     };
     let backup_path = dest_path.join(&backup_filename);

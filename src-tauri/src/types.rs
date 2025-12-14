@@ -163,6 +163,16 @@ impl Default for AppPreferences {
     }
 }
 
+impl AppPreferences {
+    /// Safe default when preferences fail to load (don't auto-close)
+    pub fn default_safe() -> Self {
+        Self {
+            auto_close_progress_window: false,
+            auto_close_delay_ms: 3000,
+        }
+    }
+}
+
 /// Diagnostics for a scheduled backup
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScheduleDiagnostics {

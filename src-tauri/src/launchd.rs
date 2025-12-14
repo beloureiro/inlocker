@@ -1,9 +1,87 @@
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::Command;
 
 /// macOS launchd integration for independent backup scheduling
 /// Creates and manages .plist files in ~/Library/LaunchAgents
+/// Uses shell wrapper scripts to bypass code signing constraints on macOS Sequoia+
+
+/// Get the scripts directory path (for shell wrappers)
+fn get_scripts_dir() -> Result<PathBuf, String> {
+    let home = std::env::var("HOME").map_err(|e| format!("Failed to get HOME: {}", e))?;
+    let scripts_dir = PathBuf::from(home).join("Library/Application Support/InLocker/scripts");
+
+    // Create directory if it doesn't exist
+    if !scripts_dir.exists() {
+        fs::create_dir_all(&scripts_dir)
+            .map_err(|e| format!("Failed to create scripts directory: {}", e))?;
+        log::info!("Created scripts directory: {:?}", scripts_dir);
+    }
+
+    Ok(scripts_dir)
+}
+
+/// Sanitize name for use in filename (remove special characters)
+fn sanitize_name(name: &str) -> String {
+    name.chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string()
+}
+
+/// Get the wrapper script path for a config
+/// Named with backup name so it appears correctly in System Settings > Background Activity
+pub fn get_wrapper_script_path(config_id: &str, config_name: Option<&str>) -> Result<PathBuf, String> {
+    let scripts_dir = get_scripts_dir()?;
+    let script_name = match config_name {
+        Some(name) => format!("InLocker-{}", sanitize_name(name)),
+        None => format!("InLocker-{}", config_id),
+    };
+    Ok(scripts_dir.join(script_name))
+}
+
+/// Create a shell wrapper script for launching backups
+/// This bypasses macOS Sequoia+ code signing constraints for launchd
+fn create_wrapper_script(config_id: &str, config_name: &str, app_path: &str) -> Result<PathBuf, String> {
+    let script_path = get_wrapper_script_path(config_id, Some(config_name))?;
+
+    let script_content = format!(
+        r#"#!/bin/sh
+# InLocker backup wrapper script
+# This script exists to bypass macOS Sequoia+ code signing constraints
+# when launching the app via launchd (scheduled backups)
+exec "{}" --backup "{}"
+"#,
+        app_path, config_id
+    );
+
+    fs::write(&script_path, &script_content)
+        .map_err(|e| format!("Failed to write wrapper script: {}", e))?;
+
+    // Make script executable (chmod +x)
+    let mut perms = fs::metadata(&script_path)
+        .map_err(|e| format!("Failed to get script metadata: {}", e))?
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&script_path, perms)
+        .map_err(|e| format!("Failed to set script permissions: {}", e))?;
+
+    log::info!("Created wrapper script: {:?}", script_path);
+    Ok(script_path)
+}
+
+/// Delete a wrapper script
+fn delete_wrapper_script(config_id: &str, config_name: Option<&str>) -> Result<(), String> {
+    let script_path = get_wrapper_script_path(config_id, config_name)?;
+    if script_path.exists() {
+        fs::remove_file(&script_path)
+            .map_err(|e| format!("Failed to delete wrapper script: {}", e))?;
+        log::info!("Deleted wrapper script: {:?}", script_path);
+    }
+    Ok(())
+}
 
 /// Get the correct executable path (handles both dev and production mode)
 pub fn get_executable_path() -> Result<String, String> {
@@ -286,10 +364,11 @@ impl CalendarInterval {
 }
 
 /// Generate .plist XML content for a backup schedule
+/// Uses shell wrapper script to bypass macOS Sequoia+ code signing constraints
 pub fn generate_plist_content(
     config_id: &str,
     cron_expr: &str,
-    app_path: &str,
+    wrapper_script_path: &str,
 ) -> Result<String, String> {
     let label = get_agent_label(config_id);
     let intervals = parse_cron_to_calendar_interval(cron_expr)?;
@@ -303,6 +382,8 @@ pub fn generate_plist_content(
   <string>"#,
     );
     plist.push_str(&label);
+    // Execute wrapper script directly (script has shebang and is executable)
+    // This shows "InLocker" in System Settings instead of "sh"
     plist.push_str(
         r#"</string>
 
@@ -310,13 +391,7 @@ pub fn generate_plist_content(
   <array>
     <string>"#,
     );
-    plist.push_str(app_path);
-    plist.push_str(
-        r#"</string>
-    <string>--backup</string>
-    <string>"#,
-    );
-    plist.push_str(config_id);
+    plist.push_str(wrapper_script_path);
     plist.push_str(
         r#"</string>
   </array>
@@ -362,12 +437,15 @@ pub fn generate_plist_content(
 
 /// Install a launch agent (write .plist file and load it)
 /// with robust verification
+/// Uses shell wrapper script to bypass macOS Sequoia+ code signing constraints
 pub fn install_launch_agent(
     config_id: &str,
+    config_name: &str,
     cron_expr: &str,
     app_path: &str,
 ) -> Result<(), String> {
     log::info!("=== Installing launch agent for config: {} ===", config_id);
+    log::info!("Config name: {}", config_name);
     log::info!("Cron expression: {}", cron_expr);
     log::info!("Executable path: {}", app_path);
 
@@ -385,9 +463,16 @@ pub fn install_launch_agent(
     let logs_dir = get_logs_dir()?;
     log::info!("Logs directory: {:?}", logs_dir);
 
-    // STEP 3: Generate plist content
+    // STEP 2.5: Create wrapper script (bypasses macOS Sequoia+ code signing constraints)
+    log::info!("Creating wrapper script...");
+    let wrapper_script_path = create_wrapper_script(config_id, config_name, app_path)?;
+    let wrapper_script_str = wrapper_script_path.to_str()
+        .ok_or("Invalid UTF-8 in wrapper script path")?;
+    log::info!("Wrapper script created: {}", wrapper_script_str);
+
+    // STEP 3: Generate plist content (using wrapper script path)
     log::info!("Generating .plist content...");
-    let plist_content = generate_plist_content(config_id, cron_expr, app_path)?;
+    let plist_content = generate_plist_content(config_id, cron_expr, wrapper_script_str)?;
 
     // STEP 3.5: If agent already exists, bootout it first to force reload
     let plist_path = get_plist_path(config_id)?;
@@ -489,8 +574,8 @@ pub fn install_launch_agent(
     Ok(())
 }
 
-/// Uninstall a launch agent (bootout and delete .plist file)
-pub fn uninstall_launch_agent(config_id: &str) -> Result<(), String> {
+/// Uninstall a launch agent (bootout, delete .plist file and wrapper script)
+pub fn uninstall_launch_agent(config_id: &str, config_name: Option<&str>) -> Result<(), String> {
     let plist_path = get_plist_path(config_id)?;
     let label = get_agent_label(config_id);
     let user_uid = get_user_uid()?;
@@ -515,6 +600,11 @@ pub fn uninstall_launch_agent(config_id: &str) -> Result<(), String> {
             .map_err(|e| format!("Failed to delete plist file: {}", e))?;
         log::info!("Deleted plist file: {:?}", plist_path);
     }
+
+    // Delete wrapper script (try with name first, fallback to id-only)
+    let _ = delete_wrapper_script(config_id, config_name);
+    // Also try to delete old-style script (with ID) if exists
+    let _ = delete_wrapper_script(config_id, None);
 
     log::info!("Uninstalled launch agent: {}", label);
     Ok(())

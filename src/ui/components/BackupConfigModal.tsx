@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BackupConfig, ScheduleConfig } from '../../store/useBackupStore';
+import { BackupConfig, ScheduleConfig, useBackupStore } from '../../store/useBackupStore';
 
 interface BackupConfigModalProps {
   config: BackupConfig;
@@ -8,6 +8,8 @@ interface BackupConfigModalProps {
 }
 
 export function BackupConfigModal({ config, onSave, onClose }: BackupConfigModalProps) {
+  const { selectFolder } = useBackupStore();
+
   // Parse existing cron expression to initialize time/day values
   const parseCronExpression = (cron: string) => {
     const parts = cron.trim().split(/\s+/);
@@ -32,6 +34,7 @@ export function BackupConfigModal({ config, onSave, onClose }: BackupConfigModal
   console.log('   Preset:', config.schedule?.preset || 'none');
 
   const [backupName, setBackupName] = useState<string>(config.name);
+  const [destinationPath, setDestinationPath] = useState<string>(config.destination_path);
   const [backupType, setBackupType] = useState<'full' | 'incremental'>(config.backup_type);
   const [backupMode, setBackupMode] = useState<'copy' | 'compressed' | 'encrypted'>(
     config.mode || 'compressed'
@@ -39,6 +42,13 @@ export function BackupConfigModal({ config, onSave, onClose }: BackupConfigModal
   const [schedulePreset, setSchedulePreset] = useState<string>(
     config.schedule?.preset || 'none'
   );
+
+  const handleSelectDestination = async () => {
+    const folder = await selectFolder();
+    if (folder) {
+      setDestinationPath(folder);
+    }
+  };
 
   // Simple time/day selectors initialized from existing config
   const [hour, setHour] = useState<number>(parsedCron.hour);
@@ -89,6 +99,7 @@ export function BackupConfigModal({ config, onSave, onClose }: BackupConfigModal
     const updatedConfig: BackupConfig = {
       ...config,
       name: backupName.trim() || config.name,
+      destination_path: destinationPath.trim() || config.destination_path,
       backup_type: backupType,
       mode: backupMode,
       schedule: scheduleConfig,
@@ -126,6 +137,29 @@ export function BackupConfigModal({ config, onSave, onClose }: BackupConfigModal
               className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 focus:border-emerald-600 focus:outline-none transition-colors"
               placeholder="Enter backup name"
             />
+          </div>
+
+          {/* Destination Path */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Destination
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={destinationPath}
+                onChange={(e) => setDestinationPath(e.target.value)}
+                className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 focus:border-emerald-600 focus:outline-none transition-colors"
+                placeholder="Destination folder path..."
+              />
+              <button
+                type="button"
+                onClick={handleSelectDestination}
+                className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm font-medium transition-colors"
+              >
+                Browse
+              </button>
+            </div>
           </div>
 
           {/* Backup Type */}

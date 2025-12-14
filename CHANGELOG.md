@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2025-12-14
+
+### Features
+
+- improve backup identification and UI responsiveness
+
+  - Add config name to backup filename (Bkp_InLocker_{name}_{type}_{timestamp})
+  - Allow editing destination path in BackupConfigModal
+  - Show backup name in launch agent (System Settings instead of ID)
+  - Fix UI delay after backup completion (move manifest scan to background)
+  - Update Tauri plugin dependencies (dialog 2.4, single-instance 2.3)
+  - Add debug logs to progress.html for auto-close troubleshooting
+
 ## [0.7.4] - 2025-12-01
 
 ### Bug Fixes
@@ -16,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add detailed debug logs to load_preferences command
   - Fix scheduled-progress window permissions configuration
   - Change default auto-close to false when preferences fail to load
+  - **NOTE:** Auto-close preference still not working correctly 
 
 ## [0.7.3] - 2025-11-30
 
