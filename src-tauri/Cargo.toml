@@ -1,6 +1,6 @@
 [package]
 name = "inlocker"
-version = "0.8.0"
+version = "0.8.1"
 description = "Automatic, compressed, and secure backups for macOS"
 authors = ["InLocker Team"]
 edition = "2021"
