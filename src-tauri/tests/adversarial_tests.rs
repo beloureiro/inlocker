@@ -63,6 +63,7 @@ fn test_path_traversal_cannot_escape_backup() {
     // Backup
     let backup_job = compress_folder(
         "path-traversal-test",
+        "Path Traversal Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -76,7 +77,7 @@ fn test_path_traversal_cannot_escape_backup() {
     let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
 
     // Restore
-    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None).unwrap();
+    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None).unwrap();
 
     // CRITICAL: File should be restored with sanitized name, NOT escaping restore dir
     let restored_files: Vec<_> = fs::read_dir(&restore_dir)
@@ -154,6 +155,7 @@ fn test_backup_with_concurrent_file_changes() {
     // Start backup
     let backup_result = compress_folder(
         "concurrent-test",
+        "Concurrent Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -206,10 +208,11 @@ fn test_extremely_deep_nesting() {
         // Backup
         let backup_result = compress_folder(
             "deep-test",
+            "Deep Test",
             &source_dir,
             &dest_dir,
             &BackupType::Full,
-        &BackupMode::Compressed,
+            &BackupMode::Compressed,
             None,
             None,
             None,
@@ -222,7 +225,7 @@ fn test_extremely_deep_nesting() {
         let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
 
         // Restore
-        let restore_result = restore_backup(&backup_path, &restore_dir, backup_job.checksum, None);
+        let restore_result = restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None);
         assert!(restore_result.is_ok(), "Should restore deep nesting");
     }
 
@@ -299,6 +302,7 @@ fn test_extreme_file_sizes() {
     // Backup
     let backup_job = compress_folder(
         "extreme-size-test",
+        "Extreme Size Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -321,7 +325,7 @@ fn test_extreme_file_sizes() {
 
     // Restore
     let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
-    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None).unwrap();
+    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None).unwrap();
 
     // Verify zero file
     let zero_restored = fs::read(restore_dir.join("zero.bin")).unwrap();
@@ -359,6 +363,7 @@ fn test_unreadable_files_handling() {
     // Try to backup
     let backup_result = compress_folder(
         "permission-test",
+        "Permission Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -404,6 +409,7 @@ fn test_detect_all_types_of_tampering() {
     // Backup
     let backup_job = compress_folder(
         "tamper-test",
+        "Tamper Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -425,19 +431,19 @@ fn test_detect_all_types_of_tampering() {
     backup_data[len - 100] ^= 0xAA;
     fs::write(&backup_path, &backup_data).unwrap();
 
-    let result1 = restore_backup(&backup_path, &restore_dir, Some(original_checksum.clone()), None);
+    let result1 = restore_backup(&backup_path, &restore_dir, Some(original_checksum.clone()), None, None, None);
     assert!(result1.is_err(), "CRITICAL: Bit-flipped backup accepted!");
 
     // TEST 2: Truncate file
     fs::write(&backup_path, &backup_data[..backup_data.len() / 2]).unwrap();
-    let result2 = restore_backup(&backup_path, &restore_dir, Some(original_checksum.clone()), None);
+    let result2 = restore_backup(&backup_path, &restore_dir, Some(original_checksum.clone()), None, None, None);
     assert!(result2.is_err(), "CRITICAL: Truncated backup accepted!");
 
     // TEST 3: Append garbage
     let mut extended_data = backup_data.clone();
     extended_data.extend_from_slice(b"MALICIOUS GARBAGE DATA");
     fs::write(&backup_path, &extended_data).unwrap();
-    let result3 = restore_backup(&backup_path, &restore_dir, Some(original_checksum.clone()), None);
+    let result3 = restore_backup(&backup_path, &restore_dir, Some(original_checksum.clone()), None, None, None);
     assert!(result3.is_err(), "CRITICAL: Extended backup accepted!");
 
     cleanup_test_dirs(&[&source_dir, &dest_dir, &restore_dir]);
@@ -455,7 +461,7 @@ fn test_incremental_race_condition_safety() {
     fs::write(source_dir.join("file1.txt"), b"version 1").unwrap();
 
     // Full backup
-    compress_folder("race-test", &source_dir, &dest_dir, &BackupType::Full, &BackupMode::Compressed, None, None, None, None).unwrap();
+    compress_folder("race-test", "Race Test", &source_dir, &dest_dir, &BackupType::Full, &BackupMode::Compressed, None, None, None, None).unwrap();
 
     let (all_files, _) = scan_all_files(&source_dir).unwrap();
     let manifest = build_manifest("race-test", &all_files, &source_dir).unwrap();
@@ -467,6 +473,7 @@ fn test_incremental_race_condition_safety() {
     // Incremental backup with OLD manifest (race condition simulation)
     let incremental = compress_folder(
         "race-test",
+        "Race Test",
         &source_dir,
         &dest_dir,
         &BackupType::Incremental,
@@ -498,6 +505,7 @@ fn test_restore_overwrites_existing_files() {
     // Backup
     let backup_job = compress_folder(
         "overwrite-test",
+        "Overwrite Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -513,7 +521,7 @@ fn test_restore_overwrites_existing_files() {
 
     // Restore
     let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
-    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None).unwrap();
+    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None).unwrap();
 
     // CRITICAL: Should have overwritten with correct content
     let restored_content = fs::read_to_string(restore_dir.join("data.txt")).unwrap();

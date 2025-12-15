@@ -59,6 +59,7 @@ fn test_incremental_backup_only_changed_files() {
     // STEP 2: First FULL backup
     let full_backup = compress_folder(
         "incremental-test",
+        "Incremental Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -93,6 +94,7 @@ fn test_incremental_backup_only_changed_files() {
 
     let incremental_backup = compress_folder(
         "incremental-test",
+        "Incremental Test",
         &source_dir,
         &dest_dir,
         &BackupType::Incremental,
@@ -129,6 +131,8 @@ fn test_incremental_backup_only_changed_files() {
         &incremental_backup_path,
         &restore_dir,
         incremental_backup.checksum,
+        None,
+        None,
         None,
     ).unwrap();
 
@@ -169,6 +173,7 @@ fn test_compression_efficiency() {
 
     let backup_job = compress_folder(
         "compression-test",
+        "Compression Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -227,6 +232,7 @@ fn test_binary_files_integrity() {
     // Backup
     let backup_job = compress_folder(
         "binary-test",
+        "Binary Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -240,7 +246,7 @@ fn test_binary_files_integrity() {
     let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
 
     // Restore
-    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None).unwrap();
+    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None).unwrap();
 
     // CRITICAL: Verify binary files are bit-for-bit identical
     let restored_png = fs::read(restore_dir.join("image.png")).unwrap();
@@ -275,6 +281,7 @@ fn test_empty_and_zero_byte_files() {
 
     let backup_job = compress_folder(
         "empty-test",
+        "Empty Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -288,7 +295,7 @@ fn test_empty_and_zero_byte_files() {
     let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
 
     // Restore
-    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None).unwrap();
+    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None).unwrap();
 
     // Verify empty file
     let empty_content = fs::read(restore_dir.join("empty.txt")).unwrap();
@@ -320,6 +327,7 @@ fn test_manifest_tracks_all_changes() {
     // Full backup
     compress_folder(
         "manifest-test",
+        "Manifest Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -367,6 +375,7 @@ fn test_manifest_tracks_all_changes() {
 
     compress_folder(
         "manifest-test",
+        "Manifest Test",
         &source_dir,
         &dest_dir,
         &BackupType::Incremental,
@@ -416,6 +425,7 @@ fn test_long_filenames() {
 
     let backup_job = compress_folder(
         "long-filename-test",
+        "Long Filename Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -427,7 +437,7 @@ fn test_long_filenames() {
     ).unwrap();
 
     let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
-    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None).unwrap();
+    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None).unwrap();
 
     // Verify long filename restored correctly
     let restored_long = restore_dir.join(&long_name_200);
@@ -452,6 +462,7 @@ fn test_backup_idempotency() {
     // Backup #1
     let backup1 = compress_folder(
         "idempotency-test",
+        "Idempotency Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -466,6 +477,7 @@ fn test_backup_idempotency() {
     std::thread::sleep(std::time::Duration::from_millis(100));
     let backup2 = compress_folder(
         "idempotency-test-2",
+        "Idempotency Test 2",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -508,6 +520,7 @@ fn test_checksum_must_differ_for_different_content() {
 
     let backup1 = compress_folder(
         "checksum-test-1",
+        "Checksum Test 1",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -525,6 +538,7 @@ fn test_checksum_must_differ_for_different_content() {
 
     let backup2 = compress_folder(
         "checksum-test-2",
+        "Checksum Test 2",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -561,7 +575,7 @@ fn test_restore_nonexistent_backup_fails_gracefully() {
     let nonexistent_backup = PathBuf::from("/nonexistent/path/backup.tar.zst");
 
     // CRITICAL: Must return error, not panic
-    let result = restore_backup(&nonexistent_backup, &restore_dir, None, None);
+    let result = restore_backup(&nonexistent_backup, &restore_dir, None, None, None, None);
 
     assert!(result.is_err(), "Restore of nonexistent backup must fail gracefully");
 
@@ -586,6 +600,7 @@ fn test_incremental_handles_deleted_files() {
     // Full backup
     let full = compress_folder(
         "deletion-test",
+        "Deletion Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -616,6 +631,7 @@ fn test_incremental_handles_deleted_files() {
     // Incremental backup
     let incremental = compress_folder(
         "deletion-test",
+        "Deletion Test",
         &source_dir,
         &dest_dir,
         &BackupType::Incremental,
@@ -689,6 +705,7 @@ fn test_hardlink_deduplication() {
     println!("\n🔵 Backing up hardlinked files...");
     let backup_result = compress_folder(
         "hardlink-test",
+        "Hardlink Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -727,7 +744,7 @@ fn test_hardlink_deduplication() {
 
     // Restore
     println!("\n🔄 Restoring hardlinked files...");
-    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None).unwrap();
+    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None).unwrap();
 
     // Verify all 6 files are restored
     assert!(restore_dir.join("original.dat").exists(), "Original file should be restored");
@@ -783,6 +800,7 @@ fn test_copy_mode_no_compression() {
     println!("\n🔵 Creating backup with COPY mode...");
     let backup_job = compress_folder(
         "copy-mode-test",
+        "Copy Mode Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -873,6 +891,7 @@ fn test_compressed_mode_with_zstd() {
     println!("\n🔵 Creating backup with COMPRESSED mode...");
     let backup_job = compress_folder(
         "compressed-mode-test",
+        "Compressed Mode Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -908,7 +927,7 @@ fn test_compressed_mode_with_zstd() {
 
     // Restore
     println!("\n🔄 Restoring from .tar.zst file...");
-    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None).unwrap();
+    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None).unwrap();
 
     // Verify content
     let restored_content = fs::read_to_string(restore_dir.join("compressible.txt")).unwrap();

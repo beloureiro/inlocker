@@ -67,6 +67,7 @@ fn test_literal_path_traversal_attack() {
     // Backup
     let backup_result = compress_folder(
         "path-traversal-test",
+        "Path Traversal Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -83,7 +84,7 @@ fn test_literal_path_traversal_attack() {
     let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
 
     // Restore
-    let restore_result = restore_backup(&backup_path, &restore_dir, backup_job.checksum, None);
+    let restore_result = restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None);
     assert!(restore_result.is_ok(), "Restore should succeed");
 
     // CRITICAL: Verify no files escaped to parent directories
@@ -134,6 +135,7 @@ fn test_null_byte_injection_in_filename() {
     // Backup should succeed
     let backup_result = compress_folder(
         "null-byte-test",
+        "Null Byte Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -150,7 +152,7 @@ fn test_null_byte_injection_in_filename() {
     let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
 
     // Restore
-    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None).unwrap();
+    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None).unwrap();
 
     // CRITICAL: Verify no path traversal occurred
     let parent_dir = restore_dir.parent().unwrap();
@@ -187,6 +189,7 @@ fn test_absolute_path_in_filename() {
     // Backup
     let backup_job = compress_folder(
         "absolute-path-test",
+        "Absolute Path Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -200,7 +203,7 @@ fn test_absolute_path_in_filename() {
     let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
 
     // Restore
-    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None).unwrap();
+    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None).unwrap();
 
     // CRITICAL: Verify no files were written to absolute paths
     assert!(!PathBuf::from("/etc/passwd_restored").exists(),
@@ -240,6 +243,7 @@ fn test_symlink_escape_prevention() {
     // Backup should complete
     let backup_result = compress_folder(
         "symlink-escape-test",
+        "Symlink Escape Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -256,7 +260,7 @@ fn test_symlink_escape_prevention() {
     let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
 
     // Restore
-    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None).unwrap();
+    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None).unwrap();
 
     let restored_link = restore_dir.join("malicious_symlink");
 
@@ -317,6 +321,7 @@ fn test_decompression_bomb_protection() {
     // Backup
     let backup_job = compress_folder(
         "bomb-test",
+        "Bomb Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -343,7 +348,7 @@ fn test_decompression_bomb_protection() {
 
     // Restore should succeed (for now, but should have limits in production)
     let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
-    let restore_result = restore_backup(&backup_path, &restore_dir, backup_job.checksum, None);
+    let restore_result = restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None);
 
     assert!(restore_result.is_ok(), "Restore should succeed");
 
@@ -360,6 +365,7 @@ fn test_decompression_bomb_protection() {
 // ============================================================================
 
 #[test]
+#[ignore] // Requires DMG setup: hdiutil create -size 50m -fs HFS+ -volname TestDisk /tmp/inlocker_test_disk.dmg
 fn test_disk_full_during_backup() {
     use std::process::Command;
     use std::io::Write;
@@ -416,6 +422,7 @@ fn test_disk_full_during_backup() {
     // Try to backup to the small disk (MUST FAIL)
     let backup_result = compress_folder(
         "disk-full-test",
+        "Disk Full Test",
         &source_dir,
         &mount_point,
         &BackupType::Full,
@@ -485,6 +492,7 @@ fn test_disk_full_during_backup() {
 // ============================================================================
 
 #[test]
+#[ignore] // Requires DMG setup: hdiutil create -size 50m -fs HFS+ -volname TestDisk /tmp/inlocker_test_disk.dmg
 fn test_disk_full_during_restore() {
     use std::process::Command;
     use std::io::Write;
@@ -523,6 +531,7 @@ fn test_disk_full_during_restore() {
     println!("Creating backup on normal disk...");
     let backup_result = compress_folder(
         "disk-full-restore-test",
+        "Disk Full Restore Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -569,7 +578,7 @@ fn test_disk_full_during_restore() {
 
     // Try to restore 100MB backup to 50MB disk (MUST FAIL)
     println!("Attempting to restore 100MB backup to 50MB disk...");
-    let restore_result = restore_backup(&backup_path, &mount_point, checksum, None);
+    let restore_result = restore_backup(&backup_path, &mount_point, checksum, None, None, None);
 
     // CRITICAL ASSERTIONS: Test must detect disk full error
 
@@ -656,6 +665,7 @@ fn test_toctou_file_modification() {
     // Start backup (this happens atomically in our implementation)
     let backup_result = compress_folder(
         "toctou-test",
+        "TOCTOU Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -719,6 +729,7 @@ fn test_very_large_file_integrity() {
     let start = std::time::Instant::now();
     let backup_job = compress_folder(
         "large-100mb-test",
+        "Large 100MB Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -738,7 +749,7 @@ fn test_very_large_file_integrity() {
     println!("Restoring 100MB file...");
     let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
     let start = std::time::Instant::now();
-    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None).unwrap();
+    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None).unwrap();
     let restore_duration = start.elapsed();
 
     println!("✓ Restore completed in {:.2}s", restore_duration.as_secs_f64());

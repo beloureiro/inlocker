@@ -7,31 +7,8 @@ pub mod types;
 
 use commands::AppState;
 use scheduler::SchedulerState;
-use types::{AppPreferences, BackupConfig};
-use tauri::{AppHandle, Emitter, Listener, Manager};
-
-/// Load preferences from disk (helper for lib.rs)
-fn load_preferences_sync(app: &AppHandle) -> AppPreferences {
-    let prefs_path = app
-        .path()
-        .app_data_dir()
-        .map(|p| p.join("preferences.json"))
-        .ok();
-
-    if let Some(path) = prefs_path {
-        if path.exists() {
-            if let Ok(json) = std::fs::read_to_string(&path) {
-                if let Ok(prefs) = serde_json::from_str::<AppPreferences>(&json) {
-                    log::info!("Loaded preferences for auto-close check: {:?}", prefs);
-                    return prefs;
-                }
-            }
-        }
-    }
-
-    log::info!("Using default preferences (auto_close: false for safety)");
-    AppPreferences::default_safe()
-}
+use types::BackupConfig;
+use tauri::{Emitter, Listener, Manager};
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -124,26 +101,15 @@ pub fn run() {
                     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
                     // Run the backup
+                    // NOTE: Auto-close is handled by progress.html (Single Source of Truth - InDRY)
                     match run_scheduled_backup_static(&app_handle, &config_id).await {
                         Ok(_) => {
                             log::info!("Single-instance scheduled backup completed successfully");
-
-                            // Check user preference before closing
-                            let prefs = load_preferences_sync(&app_handle);
-                            if prefs.auto_close_progress_window {
-                                log::info!("Auto-close enabled, closing window after {}ms", prefs.auto_close_delay_ms);
-                                tokio::time::sleep(tokio::time::Duration::from_millis(prefs.auto_close_delay_ms as u64)).await;
-                                if let Some(window) = app_handle.get_webview_window("scheduled-progress") {
-                                    let _ = window.close();
-                                }
-                            } else {
-                                log::info!("Auto-close disabled, keeping window open");
-                            }
+                            // Window close is handled by progress.html based on user preferences
                         }
                         Err(e) => {
                             log::error!("Single-instance scheduled backup failed: {}", e);
-                            // On error, always keep window open for user to see the error
-                            log::info!("Keeping window open due to error");
+                            // Window stays open for user to see the error (handled by progress.html)
                         }
                     }
                 });

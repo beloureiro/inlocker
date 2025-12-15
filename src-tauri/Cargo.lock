@@ -1880,7 +1880,7 @@ dependencies = [
 
 [[package]]
 name = "inlocker"
-version = "0.7.4"
+version = "0.8.0"
 dependencies = [
  "argon2",
  "chrono",

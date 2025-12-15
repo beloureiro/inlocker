@@ -30,7 +30,7 @@ A native macOS backup app with **3 modes**: Copy (fastest), Compressed (default)
 - ⚡ **3 backup modes** - Copy (fast), Compressed (balanced), Encrypted (secure)
 - ⚡ **full + incremental backups** with SHA-256 change detection
 - ⚡ **real-time progress feedback** during operations
-- ⚡ **launchd integration** - backups run even when app is closed
+- ⚡ **launchd integration** - backups run when app is closed (see known issues)
 - ⚡ **native macOS notifications** for backup events
 - ⚡ **compression bomb protection** - tested with extreme ratios
 
@@ -43,7 +43,7 @@ A native macOS backup app with **3 modes**: Copy (fastest), Compressed (default)
   - **Compressed** - TAR + zstd level 3 archive (default, balanced, 5841x on text)
   - **Encrypted** - TAR + zstd + AES-256-GCM (most secure)
 - **lightweight and fast**: Tauri-based native app, startup <500ms
-- **total automation**: Schedule backups with macOS launchd (hourly/daily/weekly)
+- **scheduling**: Schedule backups with macOS launchd (works when app is closed)
 - **real-time feedback**: Watch backup progress with live stages
 - **integrity verification**: SHA-256 checksums on all backups
 - **incremental backups**: Only backup changed files (52x faster)
@@ -65,25 +65,26 @@ InLocker creates different outputs depending on your chosen mode:
 
 ## current status
 
-**MVP Progress:** 🎯 **99% COMPLETE** - Production-ready core!
+**MVP Progress:** 🎯 **95% COMPLETE** - 3 known issues remaining
 
 ### completed features
 - **3 Backup Modes** - Copy, Compressed, or Encrypted (user choice)
 - **Backup Core** - Full + Incremental with mode selection
 - **Parallel Backups** - Execute multiple backups simultaneously with confirmation dialog
-- **Scheduling** - macOS launchd integration (works with app closed)
+- **Scheduling** - macOS launchd integration (works when app is CLOSED)
 - **Scheduled Progress Window** - Pure HTML progress UI with elapsed timer, sizes display
 - **Restore** - Dedicated RestoreSelector with real-time progress, cancellation support, and spinner feedback
 - **Encryption** - AES-256-GCM with password UI (31 tests passing)
 - **Real-time UI** - Live progress feedback with stage indicators during backups and restore
-- **App Preferences** - Settings modal with auto-close option for scheduled backups
+- **App Preferences** - Settings modal with auto-close option
 - **Notifications** - Native macOS alerts for backup events
 - **Security** - All critical bugs fixed, timing attacks prevented
 - **Performance** - 52x incremental speedup, 5841x compression ratio
 
-### in progress
-- Manual validation tests (100 consecutive backups)
-- Dashboard with metrics (optional)
+### known issues (in progress)
+- **Bug #005**: Scheduled backup fails when app is OPEN (single-instance plugin conflict)
+- **Bug #14**: Auto-close preference not always respected
+- **Encrypted scheduling**: Manual only (password not persisted for scheduled backups)
 
 ---
 
@@ -125,17 +126,17 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and recent updates.
 
 ## test coverage
 
-**78 tests implemented** (all passing) ✅
+**78 tests implemented** (all passing, 5 ignored) ✅
 **Zero failures. Zero data loss scenarios.**
 
 ```
 Unit Tests (lib.rs):                  7 tests
 Integration Tests:                   71 tests
-  ├─ critical_backup_tests.rs        11 tests  ✅ (+ hardlink dedup)
+  ├─ critical_backup_tests.rs        13 tests  ✅
   ├─ adversarial_tests.rs            10 tests  ✅
-  ├─ critical_security_tests.rs       9 tests  ✅ (+ disk full scenarios)
+  ├─ critical_security_tests.rs       7 tests  ✅ (+2 ignored: disk full)
   ├─ crypto_tests.rs                 31 tests  ✅
-  ├─ performance_tests.rs             4 tests  ✅ (includes stress tests)
+  ├─ performance_tests.rs             2 tests  ✅ (+2 ignored: stress tests)
   ├─ security_tests.rs                5 tests  ✅
   └─ backup_restore_integration.rs    1 test   ✅
 ```
@@ -207,16 +208,16 @@ Output files:
 
 ## roadmap
 
-### MVP features (99% complete)
+### MVP features (95% complete)
 - Folder selection and configuration management
-- Manual and automatic backup (launchd)
+- Manual and automatic backup (launchd - works when app closed)
 - Full + Incremental backup types
 - 3 Backup modes (Copy, Compressed, Encrypted)
 - Parallel backups execution
-- Optional encryption with password UI
+- Optional encryption with password UI (manual backups only)
 - Point-in-time restore with real-time progress and cancellation
 - Real-time progress UI with stage indicators
-- App preferences (auto-close scheduled backup window)
+- App preferences (auto-close option - Bug #14 pending)
 - Dashboard with metrics (optional - in progress)
 
 ### future enhancements (post-MVP)

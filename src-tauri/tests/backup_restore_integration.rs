@@ -36,6 +36,7 @@ fn test_backup_restore_cycle() {
     // PHASE 1: Backup using REAL compress_folder function
     let backup_result = compress_folder(
         "test-config-id",
+        "Test Config",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -64,6 +65,8 @@ fn test_backup_restore_cycle() {
         &restore_dir,
         None, // No checksum validation in this test
         None, // No password
+        None, // No app handle
+        None, // No cancel flag
     );
 
     assert!(restore_result.is_ok(), "Restore should succeed: {:?}", restore_result.err());
@@ -106,6 +109,8 @@ fn test_backup_restore_cycle() {
         &restore_dir,
         Some(checksum.clone()),
         None, // No password
+        None, // No app handle
+        None, // No cancel flag
     );
 
     assert!(restore_with_checksum.is_ok(), "Restore with valid checksum should succeed");
@@ -120,6 +125,8 @@ fn test_backup_restore_cycle() {
         &restore_dir,
         Some(wrong_checksum),
         None, // No password
+        None, // No app handle
+        None, // No cancel flag
     );
 
     assert!(restore_with_wrong_checksum.is_err(), "Restore with wrong checksum should FAIL");

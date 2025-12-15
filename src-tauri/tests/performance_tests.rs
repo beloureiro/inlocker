@@ -83,6 +83,7 @@ fn test_1gb_backup_performance() {
 
     let backup_result = compress_folder(
         "1gb-perf-test",
+        "1GB Perf Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -118,7 +119,7 @@ fn test_1gb_backup_performance() {
     // Verify backup integrity by restoring
     println!("\n🔄 Verifying backup integrity...");
     let start_restore = Instant::now();
-    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None).unwrap();
+    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None).unwrap();
     let restore_duration = start_restore.elapsed();
 
     println!("✓ Restore completed in {:.2}s", restore_duration.as_secs_f64());
@@ -181,6 +182,7 @@ fn test_compression_ratio_text_files() {
     println!("\n🗜️  Testing compression ratio...");
     let backup_job = compress_folder(
         "compression-test",
+        "Compression Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -235,6 +237,7 @@ fn test_incremental_10x_faster() {
 
     let _full_backup = compress_folder(
         "full-speed-test",
+        "Full Speed Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -269,6 +272,7 @@ fn test_incremental_10x_faster() {
 
     let incr_backup = compress_folder(
         "incr-speed-test",
+        "Incr Speed Test",
         &source_dir,
         &dest_dir,
         &BackupType::Incremental,
@@ -332,6 +336,7 @@ fn test_10000_small_files_performance() {
 
     let backup_job = compress_folder(
         "10k-files-test",
+        "10K Files Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -361,7 +366,7 @@ fn test_10000_small_files_performance() {
     let backup_path = PathBuf::from(backup_job.backup_path.unwrap());
     let start_restore = Instant::now();
 
-    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None).unwrap();
+    restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None).unwrap();
 
     let restore_duration = start_restore.elapsed();
     let restore_secs = restore_duration.as_secs_f64();

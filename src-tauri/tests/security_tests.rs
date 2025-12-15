@@ -27,6 +27,7 @@ fn test_detect_corrupted_backup() {
     // Backup
     let backup_job = compress_folder(
         "security-test",
+        "Security Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -50,7 +51,7 @@ fn test_detect_corrupted_backup() {
     fs::write(&backup_path, &backup_data).unwrap();
 
     // Try to restore with checksum validation - MUST FAIL
-    let restore_result = restore_backup(&backup_path, &restore_dir, Some(checksum), None);
+    let restore_result = restore_backup(&backup_path, &restore_dir, Some(checksum), None, None, None);
 
     assert!(restore_result.is_err(), "SECURITY FAILURE: Corrupted backup was accepted!");
     let error = restore_result.unwrap_err();
@@ -98,6 +99,7 @@ fn test_large_file_integrity() {
     // Backup
     let backup_job = compress_folder(
         "large-test",
+        "Large Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -111,7 +113,7 @@ fn test_large_file_integrity() {
     let backup_path = std::path::PathBuf::from(backup_job.backup_path.unwrap());
 
     // Restore
-    let restore_result = restore_backup(&backup_path, &restore_dir, backup_job.checksum, None);
+    let restore_result = restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None);
     assert!(restore_result.is_ok(), "Large file restore failed");
 
     // Verify byte-for-byte integrity
@@ -165,6 +167,7 @@ fn test_special_filenames() {
     // Backup
     let backup_result = compress_folder(
         "special-chars-test",
+        "Special Chars Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -181,7 +184,7 @@ fn test_special_filenames() {
     let backup_path = std::path::PathBuf::from(backup_job.backup_path.unwrap());
 
     // Restore
-    let restore_result = restore_backup(&backup_path, &restore_dir, backup_job.checksum, None);
+    let restore_result = restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None);
     assert!(restore_result.is_ok(), "Restore with special filenames failed");
 
     // Verify all files exist and have correct content
@@ -227,6 +230,7 @@ fn test_deep_directory_structure() {
     // Backup
     let backup_job = compress_folder(
         "deep-test",
+        "Deep Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -240,7 +244,7 @@ fn test_deep_directory_structure() {
     let backup_path = std::path::PathBuf::from(backup_job.backup_path.unwrap());
 
     // Restore
-    let restore_result = restore_backup(&backup_path, &restore_dir, backup_job.checksum, None);
+    let restore_result = restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None);
     assert!(restore_result.is_ok(), "Deep directory restore failed");
 
     // Verify deep file exists
@@ -288,6 +292,7 @@ fn test_many_small_files() {
     // Backup
     let backup_job = compress_folder(
         "many-files-test",
+        "Many Files Test",
         &source_dir,
         &dest_dir,
         &BackupType::Full,
@@ -305,7 +310,7 @@ fn test_many_small_files() {
         "Backup should contain all {} files", num_files);
 
     // Restore
-    let restore_result = restore_backup(&backup_path, &restore_dir, backup_job.checksum, None);
+    let restore_result = restore_backup(&backup_path, &restore_dir, backup_job.checksum, None, None, None);
     assert!(restore_result.is_ok(), "Many files restore failed");
 
     // Verify file count
